@@ -24,7 +24,7 @@ const { title, summary, stack, cover, coverAlt, repo, demo, draft } = project.da
     <article id="article">
       <header>
         {draft && <p class="draft-flag">Draft — still in progress</p>}
-        <h1 transition:name={`title-${project.id}`}>{title}</h1>
+        <h1>{title}</h1>
         <p class="summary">{summary}</p>
         <div class="meta-row">
           <div class="tags">
@@ -37,14 +37,7 @@ const { title, summary, stack, cover, coverAlt, repo, demo, draft } = project.da
         </div>
       </header>
 
-      <Image
-        class="cover"
-        src={cover}
-        alt={coverAlt}
-        widths={[400, 800, 1200]}
-        sizes="(max-width: 700px) 100vw, 700px"
-        transition:name={`cover-${project.id}`}
-      />
+      <Image class="cover" src={cover} alt={coverAlt} widths={[400, 800, 1200]} sizes="(max-width: 700px) 100vw, 700px" />
 
       <div class="prose">
         <Content />

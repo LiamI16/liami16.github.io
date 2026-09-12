@@ -152,8 +152,12 @@ button:focus-visible {
   padding: 0;
 }
 
-::view-transition-group(*) {
-  animation-duration: 0.32s;
+/* The dot-field ripple (Base.astro) is the page transition — the browser's
+   native crossfade is disabled so navigation is an instant cut underneath it. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none !important;
+  mix-blend-mode: normal;
 }
 
 @media (prefers-reduced-motion: reduce) {

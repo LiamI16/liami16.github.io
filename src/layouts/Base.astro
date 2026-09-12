@@ -58,6 +58,12 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     const HOT_MULTIPLIER = 1.9;
     const HOT_SELECTOR = '[data-dot-hot]';
 
+    const WAVE_SPEED = 1.7; // px/ms
+    const WAVE_BAND = 90;
+    const WAVE_BOOST = 0.55;
+    const WAVE_MIN_COVER_MS = 260;
+    const WAVE_TAIL_MS = 320;
+
     let dpr = Math.min(window.devicePixelRatio || 1, 2);
     let width = 0;
     let height = 0;
@@ -66,6 +72,12 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     let intensityTarget = 1;
     let intensity = 1;
     let rafId = 0;
+    let navWave: { active: boolean; x: number; y: number; start: number } = {
+      active: false,
+      x: 0,
+      y: 0,
+      start: 0,
+    };
 
     function layout() {
       width = window.innerWidth;
@@ -87,6 +99,9 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     function draw() {
       intensity += (intensityTarget - intensity) * 0.1;
       ctx!.clearRect(0, 0, width, height);
+
+      const waveR = navWave.active ? (performance.now() - navWave.start) * WAVE_SPEED : -1;
+
       for (const d of dots) {
         const dx = d.x - mouse.x;
         const dy = d.y - mouse.y;
@@ -106,6 +121,17 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
           alpha = BASE_ALPHA + eased * (MAX_ALPHA - BASE_ALPHA) * intensity;
         }
 
+        if (waveR >= 0) {
+          const wdx = d.x - navWave.x;
+          const wdy = d.y - navWave.y;
+          const wdist = Math.hypot(wdx, wdy);
+          const delta = Math.abs(wdist - waveR);
+          if (delta < WAVE_BAND) {
+            const waveAlpha = (1 - delta / WAVE_BAND) * WAVE_BOOST;
+            alpha = Math.max(alpha, waveAlpha);
+          }
+        }
+
         d.ox += (targetOx - d.ox) * 0.18;
         d.oy += (targetOy - d.oy) * 0.18;
 
@@ -113,6 +139,19 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
         ctx!.fillStyle = `rgba(23, 23, 20, ${alpha.toFixed(3)})`;
         ctx!.arc(d.x + d.ox, d.y + d.oy, RADIUS, 0, Math.PI * 2);
         ctx!.fill();
+      }
+    }
+
+    async function triggerNavRipple(x: number, y: number, href: string) {
+      navWave = { active: true, x, y, start: performance.now() };
+      const minCover = new Promise((resolve) => setTimeout(resolve, WAVE_MIN_COVER_MS));
+      try {
+        const { navigate } = await import('astro:transitions/client');
+        await Promise.all([minCover, navigate(href)]);
+      } finally {
+        setTimeout(() => {
+          navWave.active = false;
+        }, WAVE_TAIL_MS);
       }
     }
 
@@ -133,6 +172,27 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
       intensityTarget = 1;
     });
     window.addEventListener('resize', layout);
+
+    if (!reduceMotion) {
+      document.addEventListener('click', (e: MouseEvent) => {
+        if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        const anchor = (e.target as HTMLElement)?.closest?.('a[href]') as HTMLAnchorElement | null;
+        if (!anchor || anchor.target === '_blank' || anchor.hasAttribute('download')) return;
+
+        let url: URL;
+        try {
+          url = new URL(anchor.getAttribute('href')!, window.location.href);
+        } catch {
+          return;
+        }
+        if (url.origin !== window.location.origin) return;
+        if (url.pathname === window.location.pathname) return; // in-page anchors, no ripple
+
+        e.preventDefault();
+        triggerNavRipple(e.clientX, e.clientY, url.href);
+      });
+    }
+
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
         cancelAnimationFrame(rafId);

@@ -57,13 +57,7 @@ const projects = (await getCollection('projects', ({ data }) => import.meta.env.
             projects.map((project) => (
               <article class="prow" data-dot-hot>
                 <a class="thumb" href={`/projects/${project.id}/`} tabindex="-1" aria-hidden="true">
-                  <Image
-                    src={project.data.cover}
-                    alt=""
-                    widths={[300, 600]}
-                    sizes="(min-width: 640px) 240px, 100vw"
-                    transition:name={`cover-${project.id}`}
-                  />
+                  <Image src={project.data.cover} alt="" widths={[300, 600]} sizes="(min-width: 640px) 240px, 100vw" />
                 </a>
                 <div>
                   <p class="meta">
@@ -71,7 +65,7 @@ const projects = (await getCollection('projects', ({ data }) => import.meta.env.
                     {project.data.draft && ' · Draft'}
                   </p>
                   <h3>
-                    <a href={`/projects/${project.id}/`} transition:name={`title-${project.id}`}>{project.data.title}</a>
+                    <a href={`/projects/${project.id}/`}>{project.data.title}</a>
                   </h3>
                   <p class="desc">{project.data.summary}</p>
                   <a class="ext-link" href={`/projects/${project.id}/`}>
