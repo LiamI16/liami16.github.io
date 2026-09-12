@@ -62,7 +62,8 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     const WAVE_BAND = 150;
     const WAVE_BOOST = 0.5;
     const WAVE_MIN_COVER_MS = 460;
-    const WAVE_TAIL_MS = 520;
+    const WAVE_DECAY_MS = 1400; // exponential amplitude decay time constant
+    const WAVE_LIFETIME_MS = 4200; // total time the wave keeps bouncing before it stops
 
     let dpr = Math.min(window.devicePixelRatio || 1, 2);
     let width = 0;
@@ -100,7 +101,17 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
       intensity += (intensityTarget - intensity) * 0.1;
       ctx!.clearRect(0, 0, width, height);
 
-      const waveR = navWave.active ? (performance.now() - navWave.start) * WAVE_SPEED : -1;
+      const waveElapsed = navWave.active ? performance.now() - navWave.start : -1;
+      const waveR = waveElapsed >= 0 ? waveElapsed * WAVE_SPEED : -1;
+      const waveEnvelope = waveElapsed >= 0 ? Math.exp(-waveElapsed / WAVE_DECAY_MS) : 0;
+
+      // Method of images: a wave reflecting off a wall looks identical to a
+      // wave arriving from the source's mirror image beyond that wall. Mirror
+      // the click point across each of the 4 edges (3 positions per axis —
+      // itself, and one reflection off each wall) and check all 9
+      // combinations, which covers direct + single-wall + corner bounces.
+      const xImages = waveR >= 0 ? [navWave.x, 2 * width - navWave.x, -navWave.x] : [];
+      const yImages = waveR >= 0 ? [navWave.y, 2 * height - navWave.y, -navWave.y] : [];
 
       for (const d of dots) {
         const dx = d.x - mouse.x;
@@ -121,16 +132,20 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
           alpha = BASE_ALPHA + eased * (MAX_ALPHA - BASE_ALPHA) * intensity;
         }
 
-        if (waveR >= 0) {
-          const wdx = d.x - navWave.x;
-          const wdy = d.y - navWave.y;
-          const wdist = Math.hypot(wdx, wdy);
-          const delta = Math.abs(wdist - waveR);
-          if (delta < WAVE_BAND) {
-            const wt = 1 - delta / WAVE_BAND;
-            const smooth = wt * wt * (3 - 2 * wt); // smoothstep — soft gradient, not a hard ramp
-            alpha = Math.max(alpha, smooth * WAVE_BOOST);
+        if (waveR >= 0 && waveEnvelope > 0.015) {
+          let waveAlpha = 0;
+          for (const xi of xImages) {
+            for (const yi of yImages) {
+              const wdist = Math.hypot(d.x - xi, d.y - yi);
+              const delta = Math.abs(wdist - waveR);
+              if (delta < WAVE_BAND) {
+                const wt = 1 - delta / WAVE_BAND;
+                const smooth = wt * wt * (3 - 2 * wt); // smoothstep — soft gradient, not a hard ramp
+                waveAlpha = Math.max(waveAlpha, smooth);
+              }
+            }
           }
+          alpha = Math.max(alpha, waveAlpha * WAVE_BOOST * waveEnvelope);
         }
 
         d.ox += (targetOx - d.ox) * 0.18;
@@ -152,7 +167,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
       } finally {
         setTimeout(() => {
           navWave.active = false;
-        }, WAVE_TAIL_MS);
+        }, WAVE_LIFETIME_MS);
       }
     }
 
