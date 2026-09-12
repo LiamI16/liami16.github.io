@@ -2,20 +2,146 @@
 title: Loam
 summary: A free, in-browser app that generates endless, never-repeating lo-fi for focus — offline-capable, no accounts, no streaming.
 date: 2026-09-12
-stack: [TypeScript, Web Audio]
-cover: ./cover.svg
-coverAlt: Placeholder cover graphic
+stack: [TypeScript, Web Audio, Tone.js, PCG32]
+cover: ./cover.png
+coverAlt: Loam's player screen in the ember theme, showing the glowing orb, seed, and mixer controls
 repo: https://github.com/LiamI16/loam
 demo: https://liami16.github.io/loam/
+featured: true
 draft: true
 ---
 
-Loam grows music endlessly from a seed — a short number that deterministically
-generates an entire track. Same seed, same track, forever; change the number and get a
-different one. Passion project.
-
 ## The problem
+
+I tried to read a paper on a long flight and realized I hadn't downloaded any music —
+the cache I had was three albums already looped into the ground. Pre-downloading for
+trips works in theory, but storage fills up and even good albums go stale over a long
+enough session. I wanted something that loads once, plays forever, and never repeats
+enough for my brain to pattern-match it the way a track on a loop eventually does. That
+became Loam: a seed goes in, an infinite, reproducible, offline lo-fi soundscape comes
+out — a few hundred kilobytes, entirely client-side, no accounts or streaming.
 
 ## How it works
 
-## What I'd do differently
+### A Minecraft-style seed, not a playlist
+
+Loam doesn't store or stream audio — it generates it. A 64-bit seed deterministically
+drives every random decision the engine makes, the same way a Minecraft seed determines
+a whole world. Same seed in, byte-for-byte-identical *event sequence* out, on any
+browser or platform, forever. That determinism is what makes a seed shareable as a
+plain number and pinnable as a favorite.
+
+Underneath, the seed is never used directly. It's expanded with **PCG32** (a compact,
+statistically strong PRNG — chosen over `Math.random()`, which isn't seedable or
+reproducible across browsers) and every subsystem asks for its own *named child seed*
+via `splitmix64(root, hash("melody/density-fbm"))`, `splitmix64(root, hash("harmony/markov"))`,
+and so on. That namespacing is what lets the engine add a whole new subsystem — an
+ornament layer, a new fBm stream — without perturbing the RNG sequence every other
+subsystem already depends on. Two consumers never accidentally share a stream, so
+existing seeds don't silently change character when new features ship.
+
+The real design problem is subtler than "make music from a seed" — it's making two
+seeds feel like different *places* without either one ever feeling like a labeled
+category ("the jazzy seed," "the dense seed"). The engine's identity model is a
+five-layer stack: universal 1/f (fBm) drift on every parameter; per-seed *shape* on
+that drift (a different mean, clamp range, and timescale per seed); a handful of
+per-seed *couplings* between otherwise-independent streams; a fixed per-seed
+orchestration/mix bias (the actual anti-ergodic backbone — a constant "who's playing"
+timbre a seed never drifts away from); and per-seed weighting over structured choices
+like the chord Markov walk. No single layer is sufficient alone — pure fBm is ergodic
+(every seed eventually visits the same territory given long enough), and fixed
+per-seed knobs read as static over an hours-long session. Layering all five is what
+produces emergent, un-labelable personality.
+
+### Harmony: a hand-tuned Markov walk, perturbed per seed
+
+Chords come from a sparse, hand-tuned transition matrix over 15 chords diatonic to
+C major/A minor plus two borrowed colors (`Fm6`, `Bbmaj7`) — biased toward vamps like
+i↔IV and workhorses like vi→IV→I, with borrowed colors reachable but rare. At
+construction, each seed draws its own perturbed copy of that matrix by sampling every
+row from a Dirichlet distribution centered on the hand-tuned weights (`Dir(α · p)`,
+α=20 as the sweet spot between "every seed sounds identical" and "every seed sounds
+like a different piece entirely") — implemented from scratch with a Marsaglia–Tsang
+gamma sampler and Box–Muller normals, since it all has to come from the seeded `Rng`,
+never `Math.random`. A stateful Markov walk then steps through that per-seed matrix
+one chord at a time.
+
+Voicing is a greedy nearest-pitch voice-leading solver: each previous voice moves to
+the closest chord tone of the new chord, in any octave, so common tones are retained
+"for free" and the harmony never jumps around motionlessly.
+
+### Melody: a persistent germ, not a strategy machine
+
+Melody is the layer that carries the most per-seed identity — and the hardest one to
+get right, since "generate an infinite melody" easily collapses into either
+random-sounding noodling or audibly looping motifs. Loam's answer, after explicitly
+rejecting both a pure-activity Bernoulli model and an explicit phrase-and-strategy
+architecture, is an L-system-flavored middle path: at construction, each seed generates
+a small 3–5 note **germ** — its persistent melodic axiom, picked from ten hand-authored
+contour templates (rising-arc, falling-stepwise, pivot-tone, cradle/rocking, bell
+arpeggio, …) with seed-specific starting pitch, interval bias, and length. That germ
+never decays; it's replayed verbatim, transformed (transpose, invert, retrograde,
+fragment, augment/diminish), recombined from a rolling buffer of recent notes, or
+occasionally set aside for a fresh chord-aware pitch — the mix of those four choices is
+itself Dirichlet-perturbed per seed, so some seeds stay close to their germ and others
+wander.
+
+Whether melody plays at all is gated by a **min-cap coupling** with the chord layer's
+own activity stream:
+
+```
+effective_melody_activity =
+    (1 − coupling) · melody_activity
+  + coupling · min(melody_activity, 1 − chord_activity)
+```
+
+which was chosen over five other candidate formulas (pure inverse blending,
+multiplicative suppression, additive suppression, an exponential/Boltzmann variant, and
+an elegant-but-rejected phase-coupling model on the unit circle) specifically because it
+preserves each seed's own density character at *every* coupling value — a sparse seed
+stays sparse even when strongly coupled, because the chord layer only crowds melody out
+when it's actually busy, never uniformly suppresses it. The phase-coupling alternative
+was the closest runner-up but was rejected because at high coupling it forces melody
+active whenever chords are quiet, which kills the mutual-silence moments that calm lofi
+depends on.
+
+### The generation substrate: fractional Brownian motion as the "alive" primitive
+
+Almost every knob that should feel alive rather than static — filter cutoff, chord and
+melody activity, the melody/chord coupling strength itself — is driven by **fBm**
+(fractional Brownian motion: stacked octaves of deterministic value noise, tuned to
+roughly a 1/f spectrum, the same target Voss & Clarke identified as reading
+"musically" — more structured than white noise, livelier than brown noise). Each fBm
+stream exposes a uniform `ParamStream.evaluate(time)` interface, sampled at
+*engine-time*, i.e. the exact moment a scheduling decision is made — not on a fixed
+timer — which is what keeps the whole system reproducible from the seed alone
+regardless of how the browser's event loop happens to schedule ticks. A per-seed
+`depth` and base frequency (also drawn from the seed, never user-facing) determine how
+wide and how fast each stream drifts, which is the mechanism behind, e.g., "some seeds
+are consistently sparse, others build and recede over minutes."
+
+### Core/adapter split
+
+`@loam/core` is pure generation logic with zero audio dependency: it emits a typed
+stream of `NoteEvent` / `ParamEvent` / `TickEvent`s on an engine-time clock. A thin
+Tone.js adapter (`@loam/synth-tone`) is the only layer that touches Web Audio, resolving
+string channel names (`rhodes`, `pad`, `kick`, …) and dotted parameter paths
+(`fx.evoFilter.cutoff`) to actual synth nodes. That boundary is what makes the core
+unit-testable in Node with `vitest`, portable if Tone.js is ever swapped out, and the
+reason the whole engine can be pinned with locked-sequence determinism tests — a
+known seed produces a known byte-identical event sequence, checked layer by layer
+(PRNG → value noise → fBm → Markov walk → whole-engine fingerprint), so a regression in
+any one layer fails a specific, narrow test instead of a vague "the music sounds off."
+Scheduling itself follows the standard Web Audio lookahead pattern: the engine
+generates events 100–200ms ahead of when they fire and hands them to the adapter with
+an exact engine-time, so a GC pause or a busy JS thread never causes an audible glitch —
+already-scheduled audio plays on time regardless.
+
+## Where it stands
+
+The core engine and hosted web demo are shipped; an Obsidian plugin (same engine,
+playing inside notes) is in progress. Deliberately out of scope for v1: sample
+libraries, ML-driven generation, cloud sync, accounts — the generative,
+kilobytes-not-gigabytes identity is the point. Full design rationale, including every
+rejected alternative and why, lives in [`docs/`](https://github.com/LiamI16/loam/tree/main/docs)
+in the repo.
