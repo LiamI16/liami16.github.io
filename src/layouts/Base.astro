@@ -174,23 +174,33 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     window.addEventListener('resize', layout);
 
     if (!reduceMotion) {
-      document.addEventListener('click', (e: MouseEvent) => {
-        if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-        const anchor = (e.target as HTMLElement)?.closest?.('a[href]') as HTMLAnchorElement | null;
-        if (!anchor || anchor.target === '_blank' || anchor.hasAttribute('download')) return;
+      // Capture phase + stopImmediatePropagation: ClientRouter has its own
+      // bubble-phase click listener that preventDefault()s and navigates on
+      // its own. Running in capture lets us claim the click first and stop
+      // it from ever reaching Astro's listener, so we fully own navigation
+      // instead of racing (and losing) against it.
+      document.addEventListener(
+        'click',
+        (e: MouseEvent) => {
+          if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+          const anchor = (e.target as HTMLElement)?.closest?.('a[href]') as HTMLAnchorElement | null;
+          if (!anchor || anchor.target === '_blank' || anchor.hasAttribute('download')) return;
 
-        let url: URL;
-        try {
-          url = new URL(anchor.getAttribute('href')!, window.location.href);
-        } catch {
-          return;
-        }
-        if (url.origin !== window.location.origin) return;
-        if (url.pathname === window.location.pathname) return; // in-page anchors, no ripple
+          let url: URL;
+          try {
+            url = new URL(anchor.getAttribute('href')!, window.location.href);
+          } catch {
+            return;
+          }
+          if (url.origin !== window.location.origin) return;
+          if (url.pathname === window.location.pathname) return; // in-page anchors, no ripple
 
-        e.preventDefault();
-        triggerNavRipple(e.clientX, e.clientY, url.href);
-      });
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          triggerNavRipple(e.clientX, e.clientY, url.href);
+        },
+        { capture: true },
+      );
     }
 
     document.addEventListener('visibilitychange', () => {
