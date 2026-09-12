@@ -10,19 +10,127 @@ export async function getStaticPaths() {
 
 const { project } = Astro.props;
 const { Content } = await render(project);
-const { title, summary, stack, cover, coverAlt, repo, demo } = project.data;
+const { title, summary, stack, cover, coverAlt, repo, demo, draft } = project.data;
 ---
 
 <Base title={`${title} · Liam Imagawa`} description={summary}>
-  <article>
-    <h1>{title}</h1>
-    <p>{summary}</p>
-    <p>{stack.join(' · ')}</p>
-    <p>
-      {repo && <a href={repo}>Source</a>}
-      {demo && <a href={demo}>Live demo</a>}
-    </p>
-    <Image src={cover} alt={coverAlt} widths={[400, 800, 1200]} sizes="(max-width: 700px) 100vw, 700px" />
-    <Content />
-  </article>
+  <div class="page">
+    <a class="back" href="/">← All projects</a>
+
+    <article>
+      <header>
+        {draft && <p class="draft-flag">Draft — still in progress</p>}
+        <h1>{title}</h1>
+        <p class="summary">{summary}</p>
+        <div class="meta-row">
+          <div class="tags">
+            {stack.map((tech) => <span class="tag">{tech}</span>)}
+          </div>
+          <div class="links">
+            {repo && <a href={repo}>Source</a>}
+            {demo && <a href={demo}>Live demo</a>}
+          </div>
+        </div>
+      </header>
+
+      <Image class="cover" src={cover} alt={coverAlt} widths={[400, 800, 1200]} sizes="(max-width: 700px) 100vw, 700px" />
+
+      <div class="prose">
+        <Content />
+      </div>
+    </article>
+  </div>
 </Base>
+
+<style>
+  .page {
+    max-width: 860px;
+    margin-inline: auto;
+    padding: 3rem 1.5rem 6rem;
+  }
+
+  .back {
+    display: inline-block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    color: var(--muted);
+    margin-bottom: 2.5rem;
+    transition: color 0.2s ease;
+  }
+
+  .back:hover,
+  .back:focus-visible {
+    color: var(--ink);
+  }
+
+  .draft-flag {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-soft);
+    background: var(--line-soft);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0.25rem 0.6rem;
+    margin: 0 0 1rem;
+  }
+
+  h1 {
+    font-size: clamp(1.9rem, 4vw, 2.5rem);
+    margin: 0 0 0.85rem;
+  }
+
+  .summary {
+    font-size: 1.05rem;
+    color: var(--ink-soft);
+    max-width: 60ch;
+    margin: 0 0 1.5rem;
+  }
+
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 2.5rem;
+  }
+
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .links {
+    display: flex;
+    gap: 1.25rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+  }
+
+  .links a {
+    text-decoration: none;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .links a:hover,
+  .links a:focus-visible {
+    color: var(--ink);
+    border-color: var(--ink);
+  }
+
+  .cover {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    margin-bottom: 2.5rem;
+  }
+</style>
