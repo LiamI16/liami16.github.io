@@ -1,20 +1,114 @@
 ---
 title: Risk Metrics for Unstructured Environments
-summary: Collision risk metrics for agents with no lanes or paths — reconciling closest-point-of-approach metrics with the velocity obstacle under geometric and probabilistic uncertainty.
+summary: Collision risk metrics for agents with no lanes or paths — reconciling closest-point-of-approach metrics with the velocity obstacle, in closed form and under uncertainty.
 date: 2026-09-12
 stack: [Python, NumPy, SciPy, Matplotlib]
-cover: ./cover.svg
-coverAlt: Placeholder cover graphic
+cover: ./cover.png
+coverAlt: Nested confidence-level collision cones in relative position space next to the induced velocity obstacle in velocity space
 repo: https://github.com/LiamI16/risk-metrics
 featured: true
 draft: true
 ---
 
-Supporting code and write-up for *Systematic Comparison of Collision Risk Metrics*,
-submitted to ACC 2026 (deadline Sept 25). Two representations of collision risk for
-unstructured environments — DCPA/TCPA and the velocity obstacle — are equivalent under
-disc geometry and exact observations, and come apart under uncertainty.
+Supporting code for *Systematic Comparison of Collision Risk Metrics*, currently under
+review for ACC 2026. Working paper — the code is the source of truth until it's
+published; this page will get a results section once the numerical experiments are in.
 
 ## The problem
 
+Collision-risk assessment in unstructured environments — maritime, aviation, space —
+has no lanes or predefined paths to fall back on, so risk has to be read directly off
+the relative kinematics and geometry of nearby agents. Two families of metrics do this,
+and practitioners pick between them fairly ad hoc: **CPA metrics** (DCPA/TCPA) collapse
+an encounter into two scalars — how close agents get and when — evaluated at the
+current candidate velocity. The **velocity obstacle (VO)** instead returns the entire
+*set* of ego velocities that lead to a collision at some point in the horizon, which is
+what a controller actually needs to pick an evasive action from.
+
+Both metrics are trying to characterize the same underlying risk, but the formal
+relationship between the scalar and set-based views was only partially known — prior
+work showed a partial equivalence for a special case. We wanted the full relationship,
+for finite and infinite horizons, and then wanted to know what survives once the
+observations feeding either metric become uncertain.
+
 ## How it works
+
+### Reducing the VO to two numbers
+
+For circular agents with combined collision radius `R`, relative position `p_rel`, and
+relative velocity `v_rel`, the squared separation distance along the relative
+trajectory decomposes exactly as
+
+```
+d²(t) = ‖v_rel‖² (t − TCPA)² + DCPA²
+```
+
+— i.e. TCPA is *always* the global minimizer of separation distance, and DCPA is the
+minimum value it attains there. That one identity is what makes the rest of the
+comparison work: whether a trajectory ever comes within `R` over an infinite horizon
+reduces to a case split purely on the sign of TCPA — if TCPA is positive, check
+`DCPA ≤ R`; if TCPA is non-positive, the closest approach already happened, so check
+the current separation `‖p_rel‖ ≤ R` instead. That gives a closed-form, if-and-only-if
+membership test for the VO stated entirely in CPA terms — no need to sweep over
+velocities or intersect circles numerically. The finite-horizon case (a bounded
+look-ahead `τ`, which real systems use to avoid reacting to conflicts that are still
+far off) adds a third case for when TCPA falls outside the window, checking separation
+at the horizon boundary `τ` instead.
+
+### Support functions: one implementation for every convex shape
+
+The theoretical equivalence above is proved for discs, but the code needed to handle
+arbitrary convex agent geometry (ellipses, polygons) and — critically — needed to
+*inflate* those shapes to absorb positional and velocity uncertainty without
+reconstructing a new collision geometry by hand for every shape/uncertainty
+combination.
+
+The trick is representing every convex body by its **support function**
+`h_S(d) = max_{x∈S} d·x` instead of its boundary. Support functions turn Minkowski
+sums — which is what both "combine ego and obstacle geometry" and "inflate a shape by
+an uncertainty ellipse" actually are — into pointwise addition:
+`h_{X⊕Y}(d) = h_X(d) + h_Y(d)`. So a circle, an ellipse, a polygon, and any Minkowski
+combination of them all reduce to the same two queries — a support value and a support
+point — and stacking on a confidence-ellipse inflation for uncertainty costs exactly
+one more additive term, regardless of what shape it's being added to. `minkowski_utils`
+implements this for `Circle`, `Ellipse`, and `Polygon`, each in closed form (`O(1)` for
+circle/ellipse, `O(m)` for an `m`-vertex polygon), with `MinkowskiSum` composing them.
+
+For a general convex obstacle, the two edges of the collision cone are the roots of the
+support function evaluated along a parameterized direction `d(φ)` — exactly two roots
+exist on `[0, 2π)` since the origin sits outside the (convex) collision set. The code
+brackets sign changes on a grid of angles and refines each root with Brent's method;
+circles get the closed-form shortcut, everything else pays the `O(n)` root-finding
+cost.
+
+### Where uncertainty enters — and where it doesn't collapse cleanly
+
+Position error and velocity error enter the VO at different points: position
+uncertainty inflates the *collision set* in relative-position space; velocity
+uncertainty inflates the resulting VO in absolute velocity space. Under the
+support-function representation both are just extra additive terms, so `vo_utils`'s
+`uncertainty` / `uncertainty_models` modules implement confidence bodies (`Gaussian`,
+`UniformBox`, `UniformEllipse`, `IndependentSum`) that plug into the same
+Minkowski-sum machinery used for agent geometry — a `kσ` Gaussian confidence ellipse
+has closed-form semi-axes from the covariance eigendecomposition, and its support
+function is `k‖Σ^(1/2) d‖`.
+
+This is also where the CPA/VO equivalence proven for exact observations stops being
+free: DCPA and TCPA are each single scalars, so "uncertainty in DCPA" is a
+one-dimensional distribution question, while the VO's boundary moves as a whole
+2D set. The cover image shows this directly — nested `kσ` position-confidence
+ellipses and their induced collision cones on the left, and the corresponding
+velocity-space level sets on the right; the two views agree exactly at any fixed
+confidence level, but a single-scalar DCPA/TCPA confidence interval can't reconstruct
+that 2D shape on its own. Quantifying exactly how much information gets lost — and
+whether cheap scalar bounds can substitute for the full VO under bounded uncertainty —
+is the empirical half of the paper, currently being run.
+
+## Where it stands
+
+The theoretical side (finite/infinite-horizon equivalence, the support-function
+implementation, uncertainty inflation) is done and proven; `sampling` / `scenario` /
+`scales` cover 13 canonical encounter geometries (crossing, head-on, overtaking, …)
+used as the numerical testbed. The empirical comparison under Gaussian and bounded
+uncertainty is still being run ahead of the ACC deadline — this page will get updated
+once results land.
