@@ -158,15 +158,25 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
       }
     }
 
+    let waveToken = 0;
+
     async function triggerNavRipple(x: number, y: number, href: string) {
+      // Tag this wave so a stale timeout from an earlier (possibly
+      // aborted-by-a-newer-click) navigation can't kill a wave that
+      // superseded it — otherwise clicking again within WAVE_LIFETIME_MS
+      // of the previous click gets its ripple cut off almost immediately.
+      const token = ++waveToken;
       navWave = { active: true, x, y, start: performance.now() };
       const minCover = new Promise((resolve) => setTimeout(resolve, WAVE_MIN_COVER_MS));
       try {
         const { navigate } = await import('astro:transitions/client');
         await Promise.all([minCover, navigate(href)]);
+      } catch {
+        // navigate() rejects if a newer navigation aborted this one — fine,
+        // the newer triggerNavRipple call already owns navWave.
       } finally {
         setTimeout(() => {
-          navWave.active = false;
+          if (token === waveToken) navWave.active = false;
         }, WAVE_LIFETIME_MS);
       }
     }
