@@ -368,28 +368,29 @@ const projects = (await getCollection('projects', ({ data }) => import.meta.env.
 </style>
 
 <script>
-  let observer: IntersectionObserver | null = null;
+  // Active section = the last one whose top has scrolled past 35% of the viewport.
+  // (A narrow IntersectionObserver band marked Projects active at page load whenever
+  // About was short enough to sit entirely above the band.)
+  function updateActiveSection() {
+    const sections = [...document.querySelectorAll<HTMLElement>('.content section[id]')];
+    const links = document.querySelectorAll<HTMLAnchorElement>('.section-nav a');
+    if (!sections.length || !links.length) return;
 
-  function initScrollSpy() {
-    observer?.disconnect();
+    const threshold = window.innerHeight * 0.35;
+    let current = sections[0];
+    for (const section of sections) {
+      if (section.getBoundingClientRect().top <= threshold) current = section;
+    }
+    const atBottom =
+      window.scrollY > 0 && window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+    if (atBottom) current = sections[sections.length - 1];
 
-    const sections = document.querySelectorAll('.content section[id]');
-    const navLinks = document.querySelectorAll('.section-nav a');
-    if (!('IntersectionObserver' in window) || !sections.length) return;
-
-    observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          const link = document.querySelector(`.section-nav a[href="#${entry.target.id}"]`);
-          if (!link || !entry.isIntersecting) continue;
-          navLinks.forEach((a) => a.classList.remove('active'));
-          link.classList.add('active');
-        }
-      },
-      { rootMargin: '-40% 0px -55% 0px' },
-    );
-    sections.forEach((s) => observer!.observe(s));
+    links.forEach((a) => a.classList.toggle('active', a.getAttribute('href') === `#${current.id}`));
   }
 
-  document.addEventListener('astro:page-load', initScrollSpy);
+  // Module scripts run once per session under ClientRouter, so these attach once;
+  // on non-home pages the query finds nothing and it returns early.
+  document.addEventListener('astro:page-load', updateActiveSection);
+  document.addEventListener('scroll', updateActiveSection, { passive: true });
+  window.addEventListener('resize', updateActiveSection);
 </script>

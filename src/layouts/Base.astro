@@ -44,8 +44,9 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
 <script>
   const canvas = document.getElementById('dot-field') as HTMLCanvasElement | null;
   const ctx = canvas?.getContext('2d');
-  // Guard against re-init: the canvas is transition:persist'd across page
-  // navigations, but this script tag re-executes on each navigation.
+  // Astro runs this module once per session (it skips already-executed scripts on
+  // client-side navigation) and the canvas is transition:persist'd, so this is a
+  // one-time setup. The flag only guards against dev HMR re-running the module.
   if (canvas && ctx && !canvas.dataset.dotFieldInit) {
     canvas.dataset.dotFieldInit = 'true';
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -61,26 +62,32 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     const WAVE_SPEED = 1.0; // px/ms
     const WAVE_BAND = 150;
     const WAVE_BOOST = 0.5;
-    const WAVE_MIN_COVER_MS = 460;
     const WAVE_DECAY_MS = 450; // exponential amplitude decay time constant
-    const WAVE_LIFETIME_MS = 2000; // total time the wave keeps bouncing before it stops
+    const WAVE_LIFETIME_MS = 2000;
 
-    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Dots are batched by quantized alpha so a frame is ~32 fill() calls instead of
+    // one per dot, with no per-dot color-string allocation.
+    const ALPHA_LEVELS = 32;
+    const MAX_DRAW_ALPHA = 0.5;
+    const TAU = Math.PI * 2;
+    const fills = Array.from(
+      { length: ALPHA_LEVELS + 1 },
+      (_, i) => `rgba(23, 23, 20, ${((i / ALPHA_LEVELS) * MAX_DRAW_ALPHA).toFixed(3)})`,
+    );
+    const buckets: number[][] = Array.from({ length: ALPHA_LEVELS + 1 }, () => []);
+
+    let dpr = 1;
     let width = 0;
     let height = 0;
     let dots: { x: number; y: number; ox: number; oy: number }[] = [];
-    let mouse = { x: -9999, y: -9999 };
+    const mouse = { x: -9999, y: -9999 };
     let intensityTarget = 1;
     let intensity = 1;
     let rafId = 0;
-    let navWave: { active: boolean; x: number; y: number; start: number } = {
-      active: false,
-      x: 0,
-      y: 0,
-      start: 0,
-    };
+    let wave = { x: 0, y: 0, start: -Infinity };
 
     function layout() {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
       width = window.innerWidth;
       height = window.innerHeight;
       canvas!.width = width * dpr;
@@ -97,21 +104,22 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
       }
     }
 
-    function draw() {
+    function draw(now: number) {
       intensity += (intensityTarget - intensity) * 0.1;
-      ctx!.clearRect(0, 0, width, height);
 
-      const waveElapsed = navWave.active ? performance.now() - navWave.start : -1;
-      const waveR = waveElapsed >= 0 ? waveElapsed * WAVE_SPEED : -1;
-      const waveEnvelope = waveElapsed >= 0 ? Math.exp(-waveElapsed / WAVE_DECAY_MS) : 0;
+      const waveElapsed = now - wave.start;
+      const waveEnvelope = waveElapsed < WAVE_LIFETIME_MS ? Math.exp(-waveElapsed / WAVE_DECAY_MS) : 0;
+      const waveOn = waveEnvelope > 0.015;
+      const waveR = waveElapsed * WAVE_SPEED;
 
-      // Method of images: a wave reflecting off a wall looks identical to a
-      // wave arriving from the source's mirror image beyond that wall. Mirror
-      // the click point across each of the 4 edges (3 positions per axis —
-      // itself, and one reflection off each wall) and check all 9
-      // combinations, which covers direct + single-wall + corner bounces.
-      const xImages = waveR >= 0 ? [navWave.x, 2 * width - navWave.x, -navWave.x] : [];
-      const yImages = waveR >= 0 ? [navWave.y, 2 * height - navWave.y, -navWave.y] : [];
+      // Method of images: a wave reflecting off a wall looks identical to one
+      // arriving from the source's mirror image beyond that wall. Mirroring the
+      // click point across each edge (3 positions per axis) and checking all 9
+      // combinations covers the direct wave plus single-wall and corner bounces.
+      const xImages = [wave.x, 2 * width - wave.x, -wave.x];
+      const yImages = [wave.y, 2 * height - wave.y, -wave.y];
+
+      for (const bucket of buckets) bucket.length = 0;
 
       for (const d of dots) {
         const dx = d.x - mouse.x;
@@ -132,16 +140,14 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
           alpha = BASE_ALPHA + eased * (MAX_ALPHA - BASE_ALPHA) * intensity;
         }
 
-        if (waveR >= 0 && waveEnvelope > 0.015) {
+        if (waveOn) {
           let waveAlpha = 0;
           for (const xi of xImages) {
             for (const yi of yImages) {
-              const wdist = Math.hypot(d.x - xi, d.y - yi);
-              const delta = Math.abs(wdist - waveR);
+              const delta = Math.abs(Math.hypot(d.x - xi, d.y - yi) - waveR);
               if (delta < WAVE_BAND) {
                 const wt = 1 - delta / WAVE_BAND;
-                const smooth = wt * wt * (3 - 2 * wt); // smoothstep — soft gradient, not a hard ramp
-                waveAlpha = Math.max(waveAlpha, smooth);
+                waveAlpha = Math.max(waveAlpha, wt * wt * (3 - 2 * wt)); // smoothstep edge
               }
             }
           }
@@ -151,97 +157,96 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
         d.ox += (targetOx - d.ox) * 0.18;
         d.oy += (targetOy - d.oy) * 0.18;
 
+        const level = Math.min(ALPHA_LEVELS, Math.round((alpha / MAX_DRAW_ALPHA) * ALPHA_LEVELS));
+        buckets[level].push(d.x + d.ox, d.y + d.oy);
+      }
+
+      ctx!.clearRect(0, 0, width, height);
+      for (let i = 1; i <= ALPHA_LEVELS; i++) {
+        const pts = buckets[i];
+        if (!pts.length) continue;
+        ctx!.fillStyle = fills[i];
         ctx!.beginPath();
-        ctx!.fillStyle = `rgba(23, 23, 20, ${alpha.toFixed(3)})`;
-        ctx!.arc(d.x + d.ox, d.y + d.oy, RADIUS, 0, Math.PI * 2);
+        for (let j = 0; j < pts.length; j += 2) {
+          ctx!.moveTo(pts[j] + RADIUS, pts[j + 1]);
+          ctx!.arc(pts[j], pts[j + 1], RADIUS, 0, TAU);
+        }
         ctx!.fill();
       }
     }
 
-    let waveToken = 0;
-
-    async function triggerNavRipple(x: number, y: number, href: string) {
-      // Tag this wave so a stale timeout from an earlier (possibly
-      // aborted-by-a-newer-click) navigation can't kill a wave that
-      // superseded it — otherwise clicking again within WAVE_LIFETIME_MS
-      // of the previous click gets its ripple cut off almost immediately.
-      const token = ++waveToken;
-      navWave = { active: true, x, y, start: performance.now() };
-      const minCover = new Promise((resolve) => setTimeout(resolve, WAVE_MIN_COVER_MS));
-      try {
-        const { navigate } = await import('astro:transitions/client');
-        await Promise.all([minCover, navigate(href)]);
-      } catch {
-        // navigate() rejects if a newer navigation aborted this one — fine,
-        // the newer triggerNavRipple call already owns navWave.
-      } finally {
-        setTimeout(() => {
-          if (token === waveToken) navWave.active = false;
-        }, WAVE_LIFETIME_MS);
-      }
+    function frame(now: number) {
+      draw(now);
+      rafId = requestAnimationFrame(frame);
     }
 
-    function loop() {
-      draw();
-      rafId = requestAnimationFrame(loop);
+    function startLoop() {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(frame);
+    }
+
+    function updateHot() {
+      const hot = mouse.x < 0 ? null : document.elementFromPoint(mouse.x, mouse.y)?.closest(HOT_SELECTOR);
+      intensityTarget = hot ? HOT_MULTIPLIER : 1;
     }
 
     window.addEventListener('mousemove', (e) => {
       mouse.x = e.clientX;
       mouse.y = e.clientY;
-      const hot = document.elementFromPoint(e.clientX, e.clientY)?.closest(HOT_SELECTOR);
-      intensityTarget = hot ? HOT_MULTIPLIER : 1;
+      updateHot();
     });
-    window.addEventListener('mouseleave', () => {
+    // mouseleave isn't dispatched to window; the root element is what the pointer
+    // actually leaves when it exits the viewport.
+    document.documentElement.addEventListener('mouseleave', () => {
       mouse.x = -9999;
       mouse.y = -9999;
       intensityTarget = 1;
     });
-    window.addEventListener('resize', layout);
+    // Content moves under a stationary cursor when scrolling or swapping pages.
+    window.addEventListener('scroll', updateHot, { passive: true });
+    document.addEventListener('astro:page-load', updateHot);
+    window.addEventListener('resize', () => {
+      layout();
+      if (reduceMotion) draw(performance.now());
+    });
 
     if (!reduceMotion) {
-      // Capture phase + stopImmediatePropagation: ClientRouter has its own
-      // bubble-phase click listener that preventDefault()s and navigates on
-      // its own. Running in capture lets us claim the click first and stop
-      // it from ever reaching Astro's listener, so we fully own navigation
-      // instead of racing (and losing) against it.
+      // Only starts the ripple — ClientRouter's own click handler still performs the
+      // navigation. Capture phase runs before that handler calls preventDefault(), and
+      // the checks mirror its own so the ripple fires only for clicks it will handle.
       document.addEventListener(
         'click',
-        (e: MouseEvent) => {
-          if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-          const anchor = (e.target as HTMLElement)?.closest?.('a[href]') as HTMLAnchorElement | null;
-          if (!anchor || anchor.target === '_blank' || anchor.hasAttribute('download')) return;
+        (e) => {
+          if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+          const anchor = (e.target as Element | null)?.closest?.('a[href]');
+          if (!(anchor instanceof HTMLAnchorElement)) return;
+          if (anchor.dataset.astroReload !== undefined || anchor.hasAttribute('download')) return;
+          if (anchor.target && anchor.target !== '_self') return;
+          const url = new URL(anchor.href);
+          if (url.origin !== location.origin) return;
+          if (url.pathname === location.pathname && url.search === location.search) return;
 
-          let url: URL;
-          try {
-            url = new URL(anchor.getAttribute('href')!, window.location.href);
-          } catch {
-            return;
+          let x = e.clientX;
+          let y = e.clientY;
+          if (e.detail === 0) {
+            // Keyboard activation reports (0, 0); start from the link instead.
+            const rect = anchor.getBoundingClientRect();
+            x = rect.left + rect.width / 2;
+            y = rect.top + rect.height / 2;
           }
-          if (url.origin !== window.location.origin) return;
-          if (url.pathname === window.location.pathname) return; // in-page anchors, no ripple
-
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          triggerNavRipple(e.clientX, e.clientY, url.href);
+          wave = { x, y, start: performance.now() };
         },
         { capture: true },
       );
     }
 
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) {
-        cancelAnimationFrame(rafId);
-      } else if (!reduceMotion) {
-        rafId = requestAnimationFrame(loop);
-      }
+      if (document.hidden) cancelAnimationFrame(rafId);
+      else if (!reduceMotion) startLoop();
     });
 
     layout();
-    if (reduceMotion) {
-      draw();
-    } else {
-      loop();
-    }
+    if (reduceMotion) draw(performance.now());
+    else startLoop();
   }
 </script>

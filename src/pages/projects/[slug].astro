@@ -167,30 +167,19 @@ const { title, summary, stack, cover, coverAlt, repo, demo, draft } = project.da
 </style>
 
 <script>
-  let article: HTMLElement | null = null;
-  let fill: HTMLElement | null = null;
-
   function updateProgress() {
+    const article = document.getElementById('article');
+    const fill = document.getElementById('progress-fill');
     if (!article || !fill) return;
     const rect = article.getBoundingClientRect();
     const total = rect.height - window.innerHeight;
-    const scrolledPast = -rect.top;
-    const pct = total > 0 ? Math.min(1, Math.max(0, scrolledPast / total)) : 0;
+    const pct = total > 0 ? Math.min(1, Math.max(0, -rect.top / total)) : 0;
     fill.style.height = pct * 100 + '%';
   }
 
-  document.addEventListener('astro:page-load', () => {
-    article = document.getElementById('article');
-    fill = document.getElementById('progress-fill');
-    updateProgress();
-  });
-
-  // Global listeners only need attaching once per SPA session — the
-  // handlers above re-resolve article/fill fresh on every navigation.
-  const w = window as typeof window & { __progressRailBound?: boolean };
-  if (!w.__progressRailBound) {
-    w.__progressRailBound = true;
-    document.addEventListener('scroll', updateProgress, { passive: true });
-    window.addEventListener('resize', updateProgress);
-  }
+  // Module scripts run once per session under ClientRouter, so these attach once;
+  // elements are looked up per call so they stay valid across page swaps.
+  document.addEventListener('astro:page-load', updateProgress);
+  document.addEventListener('scroll', updateProgress, { passive: true });
+  window.addEventListener('resize', updateProgress);
 </script>
