@@ -62,8 +62,8 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     const WAVE_BAND = 150;
     const WAVE_BOOST = 0.5;
     const WAVE_MIN_COVER_MS = 460;
-    const WAVE_DECAY_MS = 1400; // exponential amplitude decay time constant
-    const WAVE_LIFETIME_MS = 4200; // total time the wave keeps bouncing before it stops
+    const WAVE_DECAY_MS = 300; // exponential amplitude decay time constant — fast, dies right after the first bounce
+    const WAVE_LIFETIME_MS = 1500; // total time the wave keeps bouncing before it stops
 
     let dpr = Math.min(window.devicePixelRatio || 1, 2);
     let width = 0;
