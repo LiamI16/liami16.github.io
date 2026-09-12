@@ -1,0 +1,25 @@
+---
+import { getCollection } from 'astro:content';
+import Base from '../layouts/Base.astro';
+
+const projects = (await getCollection('projects', ({ data }) => import.meta.env.DEV || !data.draft)).sort(
+  (a, b) => b.data.date.valueOf() - a.data.date.valueOf(),
+);
+---
+
+<Base title="Liam Imagawa" description="Projects and write-ups by Liam Imagawa.">
+  <h1>Liam Imagawa</h1>
+  <p><a href="/resume.pdf">Résumé</a> · <a href="https://github.com/LiamI16">GitHub</a></p>
+
+  <h2>Projects</h2>
+  <ul>
+    {
+      projects.map((project) => (
+        <li>
+          <a href={`/projects/${project.id}/`}>{project.data.title}</a>
+          {project.data.draft && ' (draft)'}: {project.data.summary}
+        </li>
+      ))
+    }
+  </ul>
+</Base>
