@@ -24,13 +24,23 @@ body {
   margin: 0;
   min-height: 100vh;
   background: var(--bg);
-  background-image:
-    radial-gradient(rgba(23, 23, 20, 0.05) 1px, transparent 1px);
-  background-size: 22px 22px;
   color: var(--ink-soft);
   font-family: 'Inter', system-ui, sans-serif;
   line-height: 1.65;
   -webkit-font-smoothing: antialiased;
+}
+
+#dot-field {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.skip-link,
+main {
+  position: relative;
+  z-index: 1;
 }
 
 ::selection {
@@ -142,6 +152,10 @@ button:focus-visible {
   padding: 0;
 }
 
+::view-transition-group(*) {
+  animation-duration: 0.32s;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -153,5 +167,11 @@ button:focus-visible {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }

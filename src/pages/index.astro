@@ -22,10 +22,14 @@ const projects = (await getCollection('projects', ({ data }) => import.meta.env.
         <nav class="section-nav" aria-label="Section">
           <ul>
             <li>
-              <a href="#about" class="active"><span class="nav-indicator"></span><span class="nav-label">About</span></a>
+              <a href="#about" class="active" data-dot-hot
+                ><span class="nav-indicator"></span><span class="nav-label">About</span></a
+              >
             </li>
             <li>
-              <a href="#projects"><span class="nav-indicator"></span><span class="nav-label">Projects</span></a>
+              <a href="#projects" data-dot-hot
+                ><span class="nav-indicator"></span><span class="nav-label">Projects</span></a
+              >
             </li>
           </ul>
         </nav>
@@ -51,9 +55,15 @@ const projects = (await getCollection('projects', ({ data }) => import.meta.env.
         <div class="plist">
           {
             projects.map((project) => (
-              <article class="prow">
+              <article class="prow" data-dot-hot>
                 <a class="thumb" href={`/projects/${project.id}/`} tabindex="-1" aria-hidden="true">
-                  <Image src={project.data.cover} alt="" widths={[300, 600]} sizes="(min-width: 640px) 240px, 100vw" />
+                  <Image
+                    src={project.data.cover}
+                    alt=""
+                    widths={[300, 600]}
+                    sizes="(min-width: 640px) 240px, 100vw"
+                    transition:name={`cover-${project.id}`}
+                  />
                 </a>
                 <div>
                   <p class="meta">
@@ -61,7 +71,7 @@ const projects = (await getCollection('projects', ({ data }) => import.meta.env.
                     {project.data.draft && ' · Draft'}
                   </p>
                   <h3>
-                    <a href={`/projects/${project.id}/`}>{project.data.title}</a>
+                    <a href={`/projects/${project.id}/`} transition:name={`title-${project.id}`}>{project.data.title}</a>
                   </h3>
                   <p class="desc">{project.data.summary}</p>
                   <a class="ext-link" href={`/projects/${project.id}/`}>
@@ -273,7 +283,9 @@ const projects = (await getCollection('projects', ({ data }) => import.meta.env.
 
   .prow:hover,
   .prow:focus-within {
-    background: var(--panel);
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
     border-color: var(--line);
     box-shadow: 0 10px 30px -20px rgba(23, 23, 20, 0.35);
   }
@@ -362,11 +374,16 @@ const projects = (await getCollection('projects', ({ data }) => import.meta.env.
 </style>
 
 <script>
-  const sections = document.querySelectorAll('.content section[id]');
-  const navLinks = document.querySelectorAll('.section-nav a');
+  let observer: IntersectionObserver | null = null;
 
-  if ('IntersectionObserver' in window && sections.length) {
-    const io = new IntersectionObserver(
+  function initScrollSpy() {
+    observer?.disconnect();
+
+    const sections = document.querySelectorAll('.content section[id]');
+    const navLinks = document.querySelectorAll('.section-nav a');
+    if (!('IntersectionObserver' in window) || !sections.length) return;
+
+    observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           const link = document.querySelector(`.section-nav a[href="#${entry.target.id}"]`);
@@ -377,6 +394,8 @@ const projects = (await getCollection('projects', ({ data }) => import.meta.env.
       },
       { rootMargin: '-40% 0px -55% 0px' },
     );
-    sections.forEach((s) => io.observe(s));
+    sections.forEach((s) => observer!.observe(s));
   }
+
+  document.addEventListener('astro:page-load', initScrollSpy);
 </script>

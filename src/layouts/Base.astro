@@ -1,4 +1,5 @@
 ---
+import { ClientRouter } from 'astro:transitions';
 import '../styles/global.css';
 
 interface Props {
@@ -29,11 +30,122 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
     />
+    <ClientRouter />
   </head>
   <body>
+    <canvas id="dot-field" aria-hidden="true" transition:persist></canvas>
     <a href="#main" class="skip-link">Skip to content</a>
     <main id="main">
       <slot />
     </main>
   </body>
 </html>
+
+<script>
+  const canvas = document.getElementById('dot-field') as HTMLCanvasElement | null;
+  const ctx = canvas?.getContext('2d');
+  // Guard against re-init: the canvas is transition:persist'd across page
+  // navigations, but this script tag re-executes on each navigation.
+  if (canvas && ctx && !canvas.dataset.dotFieldInit) {
+    canvas.dataset.dotFieldInit = 'true';
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const SPACING = 26;
+    const RADIUS = 1.15;
+    const BASE_ALPHA = 0.06;
+    const MAX_ALPHA = 0.18;
+    const REACT_RADIUS = 110;
+    const MAX_PUSH = 4;
+    const HOT_MULTIPLIER = 1.9;
+    const HOT_SELECTOR = '[data-dot-hot]';
+
+    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let width = 0;
+    let height = 0;
+    let dots: { x: number; y: number; ox: number; oy: number }[] = [];
+    let mouse = { x: -9999, y: -9999 };
+    let intensityTarget = 1;
+    let intensity = 1;
+    let rafId = 0;
+
+    function layout() {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas!.width = width * dpr;
+      canvas!.height = height * dpr;
+      canvas!.style.width = width + 'px';
+      canvas!.style.height = height + 'px';
+      ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      dots = [];
+      for (let x = SPACING / 2; x < width; x += SPACING) {
+        for (let y = SPACING / 2; y < height; y += SPACING) {
+          dots.push({ x, y, ox: 0, oy: 0 });
+        }
+      }
+    }
+
+    function draw() {
+      intensity += (intensityTarget - intensity) * 0.1;
+      ctx!.clearRect(0, 0, width, height);
+      for (const d of dots) {
+        const dx = d.x - mouse.x;
+        const dy = d.y - mouse.y;
+        const dist = Math.hypot(dx, dy);
+        let targetOx = 0;
+        let targetOy = 0;
+        let alpha = BASE_ALPHA;
+
+        if (dist < REACT_RADIUS) {
+          const t = 1 - dist / REACT_RADIUS;
+          const eased = t * t;
+          const push = eased * MAX_PUSH * intensity;
+          const nx = dist === 0 ? 0 : dx / dist;
+          const ny = dist === 0 ? 0 : dy / dist;
+          targetOx = nx * push;
+          targetOy = ny * push;
+          alpha = BASE_ALPHA + eased * (MAX_ALPHA - BASE_ALPHA) * intensity;
+        }
+
+        d.ox += (targetOx - d.ox) * 0.18;
+        d.oy += (targetOy - d.oy) * 0.18;
+
+        ctx!.beginPath();
+        ctx!.fillStyle = `rgba(23, 23, 20, ${alpha.toFixed(3)})`;
+        ctx!.arc(d.x + d.ox, d.y + d.oy, RADIUS, 0, Math.PI * 2);
+        ctx!.fill();
+      }
+    }
+
+    function loop() {
+      draw();
+      rafId = requestAnimationFrame(loop);
+    }
+
+    window.addEventListener('mousemove', (e) => {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+      const hot = document.elementFromPoint(e.clientX, e.clientY)?.closest(HOT_SELECTOR);
+      intensityTarget = hot ? HOT_MULTIPLIER : 1;
+    });
+    window.addEventListener('mouseleave', () => {
+      mouse.x = -9999;
+      mouse.y = -9999;
+      intensityTarget = 1;
+    });
+    window.addEventListener('resize', layout);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        cancelAnimationFrame(rafId);
+      } else if (!reduceMotion) {
+        rafId = requestAnimationFrame(loop);
+      }
+    });
+
+    layout();
+    if (reduceMotion) {
+      draw();
+    } else {
+      loop();
+    }
+  }
+</script>
