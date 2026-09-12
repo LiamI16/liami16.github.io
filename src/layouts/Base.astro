@@ -58,11 +58,11 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     const HOT_MULTIPLIER = 1.9;
     const HOT_SELECTOR = '[data-dot-hot]';
 
-    const WAVE_SPEED = 1.7; // px/ms
-    const WAVE_BAND = 90;
-    const WAVE_BOOST = 0.55;
-    const WAVE_MIN_COVER_MS = 260;
-    const WAVE_TAIL_MS = 320;
+    const WAVE_SPEED = 1.0; // px/ms
+    const WAVE_BAND = 150;
+    const WAVE_BOOST = 0.5;
+    const WAVE_MIN_COVER_MS = 460;
+    const WAVE_TAIL_MS = 520;
 
     let dpr = Math.min(window.devicePixelRatio || 1, 2);
     let width = 0;
@@ -127,8 +127,9 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
           const wdist = Math.hypot(wdx, wdy);
           const delta = Math.abs(wdist - waveR);
           if (delta < WAVE_BAND) {
-            const waveAlpha = (1 - delta / WAVE_BAND) * WAVE_BOOST;
-            alpha = Math.max(alpha, waveAlpha);
+            const wt = 1 - delta / WAVE_BAND;
+            const smooth = wt * wt * (3 - 2 * wt); // smoothstep — soft gradient, not a hard ramp
+            alpha = Math.max(alpha, smooth * WAVE_BOOST);
           }
         }
 
