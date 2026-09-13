@@ -1,0 +1,83 @@
+---
+import Base from '../layouts/Base.astro';
+import PhasePortrait from '../components/PhasePortrait.astro';
+---
+
+<Base title="Not found — Liam Imagawa" description="This page doesn't exist.">
+  <section class="lost" data-pp-surface>
+    <PhasePortrait start={[2.7, 2.4]} />
+    <div class="wrap grid">
+      <div class="copy">
+        <p class="mono code fade-up" style="--i: 0">Error 404</p>
+        <h1>
+          <span class="rise"><span style="--i: 1">This page left the</span></span>
+          <span class="rise"><span style="--i: 2">basin of attraction.</span></span>
+        </h1>
+        <p class="fade-up" style="--i: 3">
+          Whatever you were looking for isn't here. The trajectory will settle back onto its cycle; this page won't
+          come back.
+        </p>
+        <p class="fade-up" style="--i: 4"><a class="link home" href="/">Return to the homepage</a></p>
+      </div>
+      <div class="figure" data-pp-anchor></div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .lost {
+    position: relative;
+    margin-top: -4rem;
+    padding-top: 4rem;
+    overflow: hidden;
+  }
+
+  .grid {
+    position: relative;
+    display: grid;
+    min-height: 86svh;
+    align-items: center;
+    padding-block: 3rem;
+  }
+
+  @media (min-width: 900px) {
+    .grid {
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+      gap: 2rem;
+    }
+  }
+
+  .copy {
+    position: relative;
+    z-index: 1;
+  }
+
+  .figure {
+    min-height: 22rem;
+    align-self: stretch;
+  }
+
+  .code {
+    margin: 0 0 1.25rem;
+    color: var(--accent);
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(2.4rem, 5.5vw, 4.5rem);
+    line-height: 1.02;
+    letter-spacing: -0.03em;
+    margin: 0 0 1.75rem;
+  }
+
+  p {
+    max-width: 30rem;
+    margin: 0 0 1.25rem;
+  }
+
+  .home {
+    color: var(--ink);
+    font-weight: 500;
+  }
+</style>

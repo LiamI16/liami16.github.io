@@ -1,0 +1,210 @@
+---
+import { Image } from 'astro:assets';
+import type { CollectionEntry } from 'astro:content';
+
+interface Props {
+  project: CollectionEntry<'projects'>;
+  index: number;
+}
+
+const { project, index } = Astro.props;
+const { title, summary, cover, coverAlt, stack, category, status, date, draft } = project.data;
+const href = `/projects/${project.id}/`;
+---
+
+<article class="card">
+  <div class="media">
+  <Image class="glow" src={cover} alt="" widths={[96]} sizes="96px" aria-hidden="true" />
+  <a class="cover" href={href} tabindex="-1" aria-hidden="true">
+    <Image
+      src={cover}
+      alt={coverAlt}
+      widths={[480, 760, 1100]}
+      sizes="(min-width: 760px) 34rem, 100vw"
+      transition:name={`cover-${project.id}`}
+      style="view-transition-class: vt-cover"
+    />
+    <span class="index mono">{String(index + 1).padStart(2, '0')}</span>
+  </a>
+  </div>
+  <div class="body">
+    <p class="mono meta-line">
+      {category && <span>{category}</span>}
+      <span>{date.getFullYear()}</span>
+      {status && <span class="status-dot">{status}</span>}
+      {draft && <span class="draft">Draft</span>}
+    </p>
+    <h3>
+      <a href={href} transition:name={`title-${project.id}`}>{title}</a>
+    </h3>
+    <p class="summary">{summary}</p>
+    <p class="mono stack">{stack.slice(0, 4).join(' / ')}</p>
+  </div>
+</article>
+
+<style>
+  .card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  /* Tablet: one card per row, cover beside the text. */
+  @media (min-width: 600px) and (max-width: 899.98px) {
+    .card {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      align-items: center;
+      gap: 2rem;
+    }
+  }
+
+  /* Lit by the section tracker while this project is the current section. */
+  .card .status-dot::after {
+    transition: box-shadow var(--dur) var(--ease-spring);
+  }
+
+  .card[data-active] .status-dot::after {
+    box-shadow:
+      0 0 0 5px var(--accent-soft),
+      0 0 14px rgba(var(--accent-rgb), 0.6);
+  }
+
+  .media {
+    position: relative;
+    isolation: isolate;
+  }
+
+  /* The cover's own colours, blurred into an ambient glow behind it. */
+  .media :global(.glow) {
+    position: absolute;
+    inset: 12% 5% -4%;
+    width: 90%;
+    height: 92%;
+    object-fit: cover;
+    z-index: -1;
+    filter: blur(44px) saturate(1.5);
+    opacity: var(--card-glow);
+    transform: translateY(4%);
+    pointer-events: none;
+    transition:
+      opacity var(--dur) var(--ease-out),
+      transform var(--dur) var(--ease-spring);
+  }
+
+  .card:hover .media :global(.glow) {
+    opacity: calc(var(--card-glow) + 0.2);
+    transform: translateY(9%) scale(1.04);
+  }
+
+  .cover {
+    position: relative;
+    display: block;
+    aspect-ratio: 16 / 10;
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--line-soft);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+    isolation: isolate;
+  }
+
+  .cover :global(img) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform var(--dur) var(--ease-spring);
+  }
+
+  .card:hover .cover :global(img) {
+    transform: scale(1.04);
+  }
+
+  .index {
+    position: absolute;
+    top: 0.75rem;
+    left: 0.75rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: var(--ink);
+    font-size: 0.7rem;
+  }
+
+  .body {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .meta-line,
+  .summary,
+  .stack {
+    margin: 0;
+  }
+
+  .draft {
+    color: var(--accent);
+  }
+
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: clamp(1.45rem, 2.4vw, 1.75rem);
+    letter-spacing: -0.012em;
+    line-height: 1.12;
+  }
+
+  h3 a {
+    text-decoration: none;
+    background-image: linear-gradient(var(--accent), var(--accent));
+    background-size: 0% 1px;
+    background-position: 0 100%;
+    background-repeat: no-repeat;
+    transition: background-size var(--dur) var(--ease-spring);
+  }
+
+  /* Whole card is the click target. */
+  h3 a::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+  }
+
+  .card:hover h3 a {
+    background-size: 100% 1px;
+  }
+
+  .summary {
+    color: var(--ink-soft);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .stack {
+    color: var(--muted);
+  }
+
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .card {
+        animation: card-in linear both;
+        animation-timeline: view();
+        animation-range: entry 0% entry 45%;
+      }
+
+      @keyframes card-in {
+        from {
+          opacity: 0;
+          transform: translateY(48px);
+          animation-timing-function: var(--ease-out);
+        }
+      }
+    }
+  }
+</style>

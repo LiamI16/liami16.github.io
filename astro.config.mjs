@@ -8,4 +8,11 @@ import sitemap from '@astrojs/sitemap';
 export default defineConfig({
   site: 'https://liami16.github.io',
   integrations: [mdx(), sitemap()],
+  markdown: {
+    shikiConfig: {
+      // Both palettes are emitted as CSS variables; global.css picks one per theme.
+      themes: { light: 'github-light', dark: 'github-dark' },
+      defaultColor: false,
+    },
+  },
 });

@@ -6,30 +6,29 @@ The résumé covers the at-a-glance view; this site goes in depth.
 ## Done
 - Astro scaffold with MDX, sitemap, image optimization
 - Content collection: `src/content/projects/<slug>/index.mdx` (schema in `src/content.config.ts`)
-- Home page (`/`), project pages (`/projects/<slug>/`), base layout with meta/OG tags
-- `<Video>` component, reduced-motion CSS
 - GitHub Actions deploy workflow (`.github/workflows/deploy.yml`)
-- Draft placeholder: `src/content/projects/example-project/` (delete once a real project exists)
+- Design system: Newsreader / Geist / Geist Mono, one accent, light + dark themes with toggle
+- Home: phase-portrait hero, project card grid with category/status meta
+- Post layout: sticky TOC, reading progress, figure/table/quote/code styles (dual Shiki themes), next-project link
+- Motion: ζ-parameterized spring easing, staged intro, scroll-driven card reveals, card → article view-transition morph
+- Section tracker: gutter dot level with the current heading; fades in once the hero loop has scrolled away
+- Tonal depth: grain, hero spotlight, deepening section tones, cover-coloured glows
+- Fluid sizing: root type and page width scale on large screens; hero sized by viewport height
+- Default OG image, favicon + apple-touch-icon, 404 page, reduced-motion fallbacks
 
 ## 1. Content
-- [ ] List 3–6 projects in priority order (name, one-liner, repo, demo, available media)
+- [ ] Finish write-ups and flip `draft: false` — **every project is still a draft, so production shows none**
+- [ ] Real covers for `algp-blooms` and `trading-utils` (currently flat placeholders)
 - [ ] Gather screenshots, short screen recordings (under ~5 MB), diagrams
-- [ ] Write each post: problem → approach → hardest part → results → what I'd change
-- [ ] Add `public/resume.pdf`
+- [ ] Add `public/resume.pdf` (header link appears automatically)
 
-## 2. Design
-- [ ] Pick a visual direction (type, color, dark/light); mock 2–3 options first
-- [ ] Home: short intro + project card grid with covers and hover states
-- [ ] Post layout: readable measure, captions, full-bleed media, table of contents
+## 2. Next motion / media ideas
+- [ ] Live interactive figure covers (start with risk-metrics collision cone)
+- [ ] Scroll-stepped figures inside write-ups (pinned figure advances with the text)
+- [ ] Hover-to-play cover loops once short videos exist
+- [ ] Verify performance on a slow phone
 
-## 3. Motion & media
-- [ ] Page transitions: card morphs into post header (`ClientRouter`)
-- [ ] CSS scroll-driven reveals/progress (no library)
-- [ ] Components as needed: before/after slider, step diagram, YouTube embed, interactive islands
-- [ ] Verify reduced-motion and performance on a slow phone
-
-## 4. Launch
-- [ ] Default OG image, favicon, 404 page
+## 3. Launch
 
 ### Creating the repo and pushing
 Wait until at least one real project is written. `gh` is authenticated as `LiamI16`.

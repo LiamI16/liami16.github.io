@@ -13,8 +13,26 @@ npm run build    # output in dist/
 ## Add a project
 
 Create `src/content/projects/<slug>/index.mdx` with a `cover` image beside it.
-Frontmatter is validated by `src/content.config.ts`. Entries with `draft: true`
-show in `npm run dev` but are excluded from the production build.
+Frontmatter is validated by `src/content.config.ts`. Optional `category` and
+`status` (e.g. `Research`, `Under review · ACC 2026`) fill the meta line on cards
+and article headers. Entries with `draft: true` show in `npm run dev` but are
+excluded from the production build.
+
+## Design notes
+
+- **Phase portrait** (`src/components/PhasePortrait.astro`): live Van der Pol
+  trajectory over its vector field. It centres the limit cycle in the element
+  marked `data-pp-anchor` inside the nearest `data-pp-surface`.
+- **Motion** (`src/lib/spring.ts`): every transition uses one spring step
+  response baked into a CSS `linear()` easing (`--ease-spring`, ζ = 1, critically damped).
+  The footer ζ slider regenerates it at runtime.
+- **Section tracker** (`src/components/SectionTracker.astro`): one orange dot
+  just left of the content edge, level with the current section's heading. On
+  the home page it is handed over from the phase portrait's trajectory head
+  without travelling: it fades in once the whole loop has scrolled under the
+  header, and fades out before the loop reappears.
+- **Résumé link** appears in the header automatically once `public/resume.pdf` exists.
+- `public/og.png` is the default social preview; project pages use their cover.
 
 Keep video loops small (under ~5 MB, WebM/MP4). Longer videos belong on an
 external host and get embedded.

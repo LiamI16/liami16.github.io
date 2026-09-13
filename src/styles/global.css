@@ -1,14 +1,66 @@
+/* ─── Tokens ─────────────────────────────────────────────────────────── */
+
 :root {
-  --bg: #f6f6f3;
-  --panel: #ffffff;
-  --ink: #171714;
-  --ink-soft: #45453f;
-  --muted: #828275;
-  --line: #dcdace;
-  --line-soft: #eae8dc;
-  --focus: #171714;
-  --measure: 66ch;
+  color-scheme: light;
+
+  --bg: #f5f4f0;
+  --bg-deep: #ecebe5;
+  --surface: #fbfaf8;
+  --ink: #17171a;
+  --ink-soft: #3f3f45;
+  --muted: #65656c;
+  --line: #deddd6;
+  --line-soft: #ebeae4;
+  --accent: #c2410c;
+  --accent-rgb: 194, 65, 12;
+  --accent-soft: rgba(194, 65, 12, 0.1);
+  --pp-field: rgba(23, 23, 26, 0.17);
+  --shadow: 0 1px 2px rgba(23, 23, 26, 0.04), 0 12px 32px -18px rgba(23, 23, 26, 0.28);
+  --spotlight: rgba(255, 255, 255, 0.75);
+  --glow: rgba(194, 65, 12, 0.07);
+  --card-glow: 0.5;
+  --grain-opacity: 0.055;
+
+  --font-display: 'Newsreader', 'Iowan Old Style', Georgia, serif;
+  --font-sans: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  /* Motion: one spring (ζ = 1, critically damped — see src/lib/spring.ts), three time scales.
+     The footer ζ control rewrites --ease-spring at runtime. */
+  --ease-spring: linear(0, 0.0095, 0.0344, 0.0705, 0.1143, 0.1632, 0.2149, 0.2677, 0.3206, 0.3725, 0.4226, 0.4707, 0.5162, 0.5591, 0.5991, 0.6364, 0.6709, 0.7027, 0.7318, 0.7585, 0.7829, 0.8051, 0.8252, 0.8435, 0.86, 0.8748, 0.8883, 0.9003, 0.9112, 0.9209, 0.9296, 0.9374, 0.9444, 0.9506, 0.9562, 0.9611, 0.9656, 0.9695, 0.973, 0.9761, 0.9789, 0.9813, 0.9835, 0.9854, 0.9871, 0.9886, 0.99, 0.9911, 0.9922, 0.9931, 0.9939, 0.9947, 0.9953, 0.9959, 0.9964, 0.9968, 0.9972, 0.9975, 0.9978, 0.9981, 0.9983, 0.9985, 0.9987, 0.9989, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 450ms;
+  --dur: 900ms;
+  --dur-slow: 1400ms;
+
+  --gutter: clamp(1.25rem, 4vw, 2.5rem);
+  --page: clamp(72rem, 62.5vw, 96rem);
+  --measure: 40rem;
 }
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #0e0e10;
+  --bg-deep: #08080a;
+  --surface: #151518;
+  --ink: #ededeb;
+  --ink-soft: #c4c4c0;
+  --muted: #919196;
+  --line: #29292e;
+  --line-soft: #1c1c20;
+  --accent: #f08a4b;
+  --accent-rgb: 240, 138, 75;
+  --accent-soft: rgba(240, 138, 75, 0.12);
+  --pp-field: rgba(237, 237, 235, 0.15);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 40px -20px rgba(0, 0, 0, 0.7);
+  --spotlight: rgba(255, 255, 255, 0.035);
+  --glow: rgba(240, 138, 75, 0.08);
+  --card-glow: 0.38;
+  --grain-opacity: 0.045;
+}
+
+/* ─── Base ───────────────────────────────────────────────────────────── */
 
 *,
 *::before,
@@ -17,34 +69,56 @@
 }
 
 html {
+  /* 16px up to ~1600px wide, easing up to 19px at 2560px so large screens aren't undersized. */
+  font-size: clamp(100%, calc(0.3125vw + 0.6875rem), 118.75%);
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
   background: var(--bg);
   color: var(--ink-soft);
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--font-sans);
+  font-size: 1rem;
   line-height: 1.65;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'ss01';
+  transition: background-color var(--dur-fast) var(--ease-out);
 }
 
-#dot-field {
+main {
+  flex: 1;
+}
+
+/* Film grain over the whole page: static, composited once. */
+body::after {
+  content: '';
   position: fixed;
   inset: 0;
-  z-index: 0;
+  z-index: 60;
   pointer-events: none;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 220px 220px;
 }
 
-.skip-link,
-main {
+/* A section that sinks from the page tone into the deeper footer tone,
+   lit by a faint accent glow where it begins. */
+.tone {
   position: relative;
-  z-index: 1;
+  background:
+    radial-gradient(60% 420px at 50% 0%, var(--glow), transparent 100%),
+    linear-gradient(to bottom, var(--bg) 0%, var(--bg-deep) 100%);
+  padding-bottom: clamp(5rem, 10vw, 8rem);
 }
 
 ::selection {
-  background: var(--ink);
+  background: var(--accent);
   color: var(--bg);
 }
 
@@ -53,112 +127,353 @@ a {
 }
 
 img,
-video {
+video,
+svg,
+canvas {
+  display: block;
   max-width: 100%;
+}
+
+img,
+video {
   height: auto;
 }
 
 h1,
 h2,
-h3 {
+h3,
+h4 {
   color: var(--ink);
+  line-height: 1.15;
   text-wrap: balance;
+  margin: 0;
 }
 
-a:focus-visible,
-button:focus-visible {
-  outline: 2px solid var(--focus);
+p {
+  text-wrap: pretty;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
   outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.wrap {
+  width: 100%;
+  max-width: var(--page);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0;
+  font-feature-settings: 'zero', 'tnum';
 }
 
 .skip-link {
   position: absolute;
-  top: 0;
-  left: 0;
-  transform: translateX(-120%);
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 100;
+  transform: translateY(-160%);
   background: var(--ink);
   color: var(--bg);
-  padding: 0.75rem 1.25rem;
-  font-size: 0.8rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  z-index: 100;
+  padding: 0.6rem 1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
   text-decoration: none;
-  transition: transform 0.2s ease;
+  transition: transform var(--dur-fast) var(--ease-spring);
 }
 
 .skip-link:focus-visible {
-  transform: translateX(0);
+  transform: none;
 }
 
-.eyebrow {
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+/* Underlined text link with an accent rule that grows on hover. */
+.link {
+  text-decoration: none;
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: 100% 1px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  padding-bottom: 1px;
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    background-size var(--dur-fast) var(--ease-spring);
+}
+
+.link:hover {
+  color: var(--accent);
+}
+
+/* ─── Entrance choreography ──────────────────────────────────────────── */
+
+/* A line of display type rising out of a mask. Wrap text in
+   <span class="rise"><span style="--i: n">…</span></span>. */
+.rise {
+  display: block;
+  overflow: clip;
+  padding-block: 0.04em 0.12em;
+  margin-block: -0.04em -0.12em;
+}
+
+.rise > span {
+  display: inline-block;
+  transform: translateY(110%);
+  animation: rise var(--dur-slow) var(--ease-spring) forwards;
+  animation-delay: calc(var(--i, 0) * 90ms + 80ms);
+}
+
+.fade-up {
+  opacity: 0;
+  transform: translateY(14px);
+  animation:
+    fade var(--dur) var(--ease-out) forwards,
+    rise var(--dur) var(--ease-spring) forwards;
+  animation-delay: calc(var(--i, 0) * 90ms + 200ms);
+}
+
+@keyframes rise {
+  to {
+    transform: none;
+  }
+}
+
+@keyframes fade {
+  to {
+    opacity: 1;
+  }
+}
+
+/* Returning via client-side navigation: skip the staged intro. */
+html[data-soft-nav] .rise > span,
+html[data-soft-nav] .fade-up {
+  animation-delay: 0ms;
+  animation-duration: var(--dur-fast);
+}
+
+/* ─── Tags / meta ────────────────────────────────────────────────────── */
+
+.meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.6rem;
   color: var(--muted);
 }
 
-.tag {
-  display: inline-block;
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--ink-soft);
-  background: var(--line-soft);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 0.2rem 0.5rem;
+.meta-line > * + *::before {
+  content: '·';
+  order: -2; /* stays ahead of the status dot, which is also a pseudo-element */
+  margin-right: 0.6rem;
+  color: var(--muted);
 }
 
-/* prose (project write-ups) */
+.status-dot {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-soft);
+}
+
+.status-dot::after {
+  content: '';
+  order: -1;
+  margin-right: 0.45rem;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* ─── Prose (project write-ups) ──────────────────────────────────────── */
+
 .prose {
   max-width: var(--measure);
+  font-size: 1.0625rem;
+  line-height: 1.75;
+}
+
+.prose > :first-child {
+  margin-top: 0;
+}
+
+.prose h2,
+.prose h3 {
+  scroll-margin-top: 6rem;
 }
 
 .prose h2 {
-  font-size: 1.4rem;
-  margin-top: 2.5rem;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(1.6rem, 3vw, 2rem);
+  letter-spacing: -0.01em;
+  margin: 3.5rem 0 1rem;
 }
 
 .prose h3 {
-  font-size: 1.1rem;
-  margin-top: 2rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  margin: 2.5rem 0 0.75rem;
 }
 
-.prose p {
-  font-size: 1rem;
+.prose p,
+.prose ul,
+.prose ol,
+.prose blockquote,
+.prose figure,
+.prose pre,
+.prose table {
+  margin: 0 0 1.35rem;
 }
 
-.prose code {
-  background: var(--line-soft);
+.prose strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.prose a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: rgba(var(--accent-rgb), 0.5);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    text-decoration-color var(--dur-fast) var(--ease-out);
+}
+
+.prose a:hover {
+  color: var(--accent);
+  text-decoration-color: var(--accent);
+}
+
+.prose ul,
+.prose ol {
+  padding-left: 1.25rem;
+}
+
+.prose li + li {
+  margin-top: 0.4rem;
+}
+
+.prose li::marker {
+  color: var(--muted);
+}
+
+.prose blockquote {
+  padding-left: 1.25rem;
+  border-left: 2px solid var(--accent);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  line-height: 1.55;
+}
+
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 3rem 0;
+}
+
+.prose figure img,
+.prose figure video,
+.prose > p > img {
+  width: 100%;
+  border-radius: 10px;
   border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 0.1rem 0.35rem;
-  font-size: 0.9em;
 }
 
-.prose pre {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 1rem 1.25rem;
+.prose figcaption {
+  margin-top: 0.7rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  display: block;
   overflow-x: auto;
 }
 
-.prose pre code {
-  background: none;
-  border: none;
-  padding: 0;
+.prose th,
+.prose td {
+  text-align: left;
+  padding: 0.55rem 0.9rem 0.55rem 0;
+  border-bottom: 1px solid var(--line);
 }
 
-/* The dot-field ripple (Base.astro) is the page transition — the browser's
-   native crossfade is disabled so navigation is an instant cut underneath it. */
+.prose th {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.prose :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  color: var(--ink);
+  background: var(--line-soft);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0.08rem 0.32rem;
+}
+
+.prose pre {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.65;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1.1rem 1.25rem;
+  overflow-x: auto;
+}
+
+/* Shiki emits both palettes as variables (defaultColor: false). */
+.astro-code,
+.astro-code span {
+  color: var(--shiki-light);
+}
+
+.astro-code {
+  background-color: var(--surface) !important;
+}
+
+:root[data-theme='dark'] .astro-code,
+:root[data-theme='dark'] .astro-code span {
+  color: var(--shiki-dark);
+}
+
+/* ─── Page transitions ───────────────────────────────────────────────── */
+
+::view-transition-group(*) {
+  animation-duration: var(--dur);
+  animation-timing-function: var(--ease-spring);
+}
+
 ::view-transition-old(root),
 ::view-transition-new(root) {
-  animation: none !important;
-  mix-blend-mode: normal;
+  animation-duration: var(--dur-fast);
+  animation-timing-function: var(--ease-out);
 }
+
+/* Covers morph between card and article header despite different aspect ratios. */
+::view-transition-old(*.vt-cover),
+::view-transition-new(*.vt-cover) {
+  height: 100%;
+  object-fit: cover;
+  overflow: clip;
+}
+
+/* ─── Reduced motion ─────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
   html {
@@ -169,6 +484,7 @@ button:focus-visible {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }

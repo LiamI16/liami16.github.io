@@ -1,396 +1,314 @@
 ---
-import { Image } from 'astro:assets';
 import { getCollection } from 'astro:content';
 import Base from '../layouts/Base.astro';
+import PhasePortrait from '../components/PhasePortrait.astro';
+import ProjectCard from '../components/ProjectCard.astro';
 
 const projects = (await getCollection('projects', ({ data }) => import.meta.env.DEV || !data.draft)).sort(
   (a, b) => Number(b.data.featured) - Number(a.data.featured) || b.data.date.valueOf() - a.data.date.valueOf(),
 );
 ---
 
-<Base title="Liam Imagawa" description="Projects and write-ups by Liam Imagawa.">
-  <div class="layout">
-    <aside class="sidebar">
-      <div>
-        <h1>Liam Imagawa</h1>
-        <p class="role">Systems &amp; controls engineer</p>
-        <p class="bio">
-          Long-form write-ups on the projects behind the résumé — the reasoning behind a
-          design, the theorem behind a proof, the part that actually took the time.
-        </p>
+<Base
+  title="Liam Imagawa — Systems & controls engineer"
+  description="Long-form write-ups on control theory, robotics, and generative systems projects by Liam Imagawa."
+>
+  <section class="hero" data-pp-surface>
+    <PhasePortrait />
 
-        <nav class="section-nav" aria-label="Section">
-          <ul>
-            <li>
-              <a href="#about" class="active" data-dot-hot
-                ><span class="nav-indicator"></span><span class="nav-label">About</span></a
-              >
-            </li>
-            <li>
-              <a href="#projects" data-dot-hot
-                ><span class="nav-indicator"></span><span class="nav-label">Projects</span></a
-              >
-            </li>
-          </ul>
-        </nav>
+    <div class="wrap hero-grid">
+      <div class="intro">
+        <p class="mono eyebrow fade-up" style="--i: 0">Systems &amp; controls engineer</p>
+        <h1>
+          <span class="rise"><span style="--i: 1">Liam</span></span>
+          <span class="rise"><span style="--i: 2">Imagawa</span></span>
+        </h1>
+        <p class="lede fade-up" style="--i: 3">
+          Student engineer working across control theory and generative systems. Currently: collision risk under
+          uncertainty, and a music engine that never repeats.
+        </p>
+        <p class="cta fade-up" style="--i: 4">
+          <a href="#work" class="button">
+            Selected work
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3.5 8.5 8 13l4.5-4.5"></path></svg>
+          </a>
+          <a href="mailto:liamimagawa@gmail.com" class="link">Get in touch</a>
+        </p>
       </div>
 
-      <div class="links">
-        <a href="/resume.pdf">Résumé</a>
-        <a href="https://github.com/LiamI16">GitHub</a>
-      </div>
-    </aside>
-
-    <div class="content">
-      <section id="about" class="about">
-        <h2 class="eyebrow">About</h2>
-        <p>
-          I'm a student engineer working across control theory and generative systems. This
-          site is the in-depth companion to the résumé.
-        </p>
-      </section>
-
-      <section id="projects">
-        <h2 class="eyebrow">Projects</h2>
-        <div class="plist">
-          {
-            projects.map((project) => (
-              <article class="prow" data-dot-hot>
-                <a class="thumb" href={`/projects/${project.id}/`} tabindex="-1" aria-hidden="true">
-                  <Image src={project.data.cover} alt="" widths={[300, 600]} sizes="(min-width: 640px) 240px, 100vw" />
-                </a>
-                <div>
-                  <p class="meta">
-                    {project.data.stack.slice(0, 3).join(' · ')}
-                    {project.data.draft && ' · Draft'}
-                  </p>
-                  <h3>
-                    <a href={`/projects/${project.id}/`}>{project.data.title}</a>
-                  </h3>
-                  <p class="desc">{project.data.summary}</p>
-                  <a class="ext-link" href={`/projects/${project.id}/`}>
-                    Read more
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M7 17 17 7M9 7h8v8" />
-                    </svg>
-                  </a>
-                </div>
-              </article>
-            ))
-          }
-        </div>
-      </section>
+      <figure class="figure" data-pp-anchor>
+        <figcaption class="mono fade-up" style="--i: 5">
+          <span class="fig-title">Fig. 0 — Van der Pol oscillator, μ = 1</span>
+          <span class="fig-hint"><span class="pointer-fine">Move to perturb · click to kick</span><span
+              class="pointer-coarse">Tap to kick the state</span
+            ></span>
+          <span class="readout" data-pp-readout aria-hidden="true">x +0.35   ẋ +0.00</span>
+        </figcaption>
+      </figure>
     </div>
+  </section>
+
+  <div class="tone">
+  <section id="work" class="wrap work" aria-labelledby="work-title">
+    <header class="work-head">
+      <h2 id="work-title">Selected work</h2>
+      <p class="mono count">({String(projects.length).padStart(2, '0')})</p>
+      <p class="work-note">
+        Long-form companions to the résumé — the reasoning behind a design, the theorem behind a proof, the part that
+        actually took the time.
+      </p>
+    </header>
+
+    {
+      projects.length > 0 ? (
+        <div class="grid">
+          {projects.map((project, i) => (
+            <ProjectCard project={project} index={i} />
+          ))}
+        </div>
+      ) : (
+        <p class="mono empty">Write-ups are in progress — check back soon.</p>
+      )
+    }
+  </section>
   </div>
 </Base>
 
 <style>
-  .layout {
-    max-width: 1180px;
-    margin-inline: auto;
-    padding: 0 1.5rem;
+  .hero {
+    position: relative;
+    margin-top: -4rem; /* slide under the sticky header */
+    padding-top: 4rem;
+    overflow: hidden;
+    border-bottom: 1px solid var(--line);
+    /* A soft pool of light behind the figure. */
+    background: radial-gradient(ellipse 45% 55% at 72% 52%, var(--spotlight), transparent 100%);
   }
 
-  @media (min-width: 1024px) {
-    .layout {
-      display: flex;
-      gap: 3rem;
-      align-items: flex-start;
+  @media (max-width: 699px) {
+    .hero {
+      background: radial-gradient(ellipse 80% 30% at 50% 78%, var(--spotlight), transparent 100%);
     }
   }
 
-  .sidebar {
-    padding: 3rem 0;
+  .hero-grid {
+    position: relative;
+    display: grid;
+    /* Height follows the window, so short laptop screens still show the CTA and caption. */
+    min-height: clamp(34rem, calc(100svh - 4rem), 64rem);
+    padding-block: clamp(2rem, 7svh, 6rem) 2rem;
+    /* Distance from the content edge to the viewport edge, for the full-bleed figure. */
+    --bleed: max(var(--gutter), calc((100vw - var(--page)) / 2 + var(--gutter)));
   }
 
-  @media (min-width: 1024px) {
-    .sidebar {
-      position: sticky;
-      top: 0;
-      width: 40%;
-      max-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      padding: 6rem 0;
-      border-right: 1px solid var(--line);
+  @media (min-width: 700px) {
+    .hero-grid {
+      grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+      gap: 2rem;
+      align-items: center;
     }
   }
 
-  .sidebar h1 {
-    font-size: 2rem;
-    font-weight: 800;
-    letter-spacing: -0.01em;
-    margin: 0 0 0.6rem;
+  .intro {
+    position: relative;
+    z-index: 1;
+    align-self: center;
   }
 
-  .sidebar .role {
-    font-size: 1.05rem;
-    font-weight: 600;
+  .eyebrow {
+    margin: 0 0 1.5rem;
+    color: var(--accent);
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    /* Bounded by width, height, and the text column (page width) so the name never clips. */
+    font-size: clamp(3.6rem, min(11vw, 16svh, calc(var(--page) * 0.12)), 12rem);
+    line-height: 0.92;
+    letter-spacing: -0.035em;
+    margin: 0 0 2rem;
+  }
+
+  .lede {
+    max-width: 30rem;
+    margin: 0 0 2.25rem;
+    font-size: clamp(1.05rem, 1.6vw, 1.2rem);
+    line-height: 1.6;
     color: var(--ink-soft);
-    margin: 0 0 1.1rem;
   }
 
-  .sidebar .bio {
-    max-width: 34ch;
-    font-size: 0.94rem;
-    color: var(--muted);
+  .cta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1.5rem;
     margin: 0;
   }
 
-  nav.section-nav {
-    margin-top: 3rem;
+  .button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.7rem 1.15rem 0.7rem 1.3rem;
+    border-radius: 999px;
+    background: var(--ink);
+    color: var(--bg);
+    font-weight: 500;
+    font-size: 0.95rem;
+    text-decoration: none;
+    transition:
+      transform var(--dur) var(--ease-spring),
+      background-color var(--dur-fast) var(--ease-out);
+  }
+
+  .button svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: transform var(--dur) var(--ease-spring);
+  }
+
+  .button:hover {
+    background: var(--accent);
+    transform: translateY(-2px);
+  }
+
+  .button:hover svg {
+    transform: translateY(2px);
+  }
+
+  .cta .link {
+    color: var(--ink);
+    font-weight: 500;
+  }
+
+  /* The phase portrait centres its limit cycle in this box. */
+  .figure {
+    position: relative;
+    margin: 0;
+    min-height: 24rem;
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+  }
+
+  @media (min-width: 700px) {
+    /* Bleed to the viewport's right edge so the portrait grows with the window;
+       padding keeps the caption aligned with the content edge. */
+    .figure {
+      align-self: stretch;
+      min-height: 0;
+      margin-right: calc(-1 * var(--bleed));
+      padding-right: var(--bleed);
+    }
+  }
+
+  figcaption {
+    display: grid;
+    gap: 0.15rem;
+    text-align: right;
+    color: var(--muted);
+    font-size: 0.72rem;
+    line-height: 1.5;
+    transform: translateY(0.5rem);
+  }
+
+  .fig-title {
+    color: var(--ink-soft);
+  }
+
+  .readout {
+    color: var(--accent);
+    white-space: pre;
+  }
+
+  .pointer-coarse {
     display: none;
   }
 
-  @media (min-width: 1024px) {
-    nav.section-nav {
-      display: block;
+  @media (pointer: coarse) {
+    .pointer-fine {
+      display: none;
+    }
+
+    .pointer-coarse {
+      display: inline;
     }
   }
 
-  nav.section-nav ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
+  .work {
+    padding-top: clamp(4rem, 10vw, 7rem);
+    scroll-margin-top: 3rem;
   }
 
-  nav.section-nav a {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.6rem 0;
-    text-decoration: none;
-    outline-offset: 4px;
-  }
-
-  .nav-indicator {
-    height: 1px;
-    width: 2rem;
-    background: var(--line);
-    transition: all 0.25s ease;
-  }
-
-  .nav-label {
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--muted);
-    transition: color 0.25s ease;
-  }
-
-  nav.section-nav a:hover .nav-indicator,
-  nav.section-nav a.active .nav-indicator {
-    width: 3.5rem;
-    background: var(--ink);
-  }
-
-  nav.section-nav a:hover .nav-label,
-  nav.section-nav a.active .nav-label {
-    color: var(--ink);
-  }
-
-  .links {
-    display: flex;
-    gap: 1.5rem;
-    margin-top: 2.5rem;
-    font-size: 0.85rem;
-    font-weight: 600;
-  }
-
-  @media (min-width: 1024px) {
-    .links {
-      margin-top: 0;
-    }
-  }
-
-  .links a {
-    text-decoration: none;
-    border-bottom: 1px solid var(--line);
-    padding-bottom: 0.1rem;
-    transition:
-      color 0.2s ease,
-      border-color 0.2s ease;
-  }
-
-  .links a:hover,
-  .links a:focus-visible {
-    color: var(--ink);
-    border-color: var(--ink);
-  }
-
-  .content {
-    padding: 3rem 0 6rem;
-  }
-
-  @media (min-width: 1024px) {
-    .content {
-      width: 60%;
-      padding-top: 6rem;
-    }
-  }
-
-  section {
-    margin-bottom: 4rem;
-  }
-
-  section > .eyebrow {
-    display: block;
-    margin: 0 0 1.5rem;
-  }
-
-  .about p {
-    max-width: 58ch;
-    margin: 0;
-  }
-
-  .plist {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-  }
-
-  .plist:hover .prow:not(:hover) {
-    opacity: 0.6;
-  }
-
-  .prow {
-    position: relative;
+  .work-head {
     display: grid;
-    grid-template-columns: 1fr;
-    gap: 1rem;
-    padding: 1.25rem;
-    margin-inline: -1.25rem;
-    border-radius: 8px;
-    border: 1px solid transparent;
-    transition:
-      opacity 0.25s ease,
-      background 0.2s ease,
-      border-color 0.2s ease,
-      box-shadow 0.2s ease;
+    grid-template-columns: auto 1fr;
+    align-items: baseline;
+    column-gap: 0.75rem;
+    row-gap: 1rem;
+    margin-bottom: clamp(2.5rem, 6vw, 4rem);
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--line);
   }
 
-  .prow:not(:last-child) {
-    border-bottom: 1px solid var(--line-soft);
+  .work-head h2 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(2.2rem, 5vw, 3.4rem);
+    letter-spacing: -0.025em;
+    line-height: 1;
   }
 
-  .prow:hover,
-  .prow:focus-within {
-    background: rgba(255, 255, 255, 0.6);
-    backdrop-filter: blur(3px);
-    -webkit-backdrop-filter: blur(3px);
-    border-color: var(--line);
-    box-shadow: 0 10px 30px -20px rgba(23, 23, 20, 0.35);
+  .count {
+    margin: 0;
+    color: var(--muted);
   }
 
-  @media (min-width: 640px) {
-    .prow {
-      grid-template-columns: 9rem 1fr;
-      align-items: center;
-      gap: 1.5rem;
+  .work-note {
+    grid-column: 1 / -1;
+    max-width: 38rem;
+    margin: 0;
+    color: var(--muted);
+  }
+
+  @media (min-width: 900px) {
+    .work-head {
+      grid-template-columns: auto auto 1fr;
+    }
+
+    .work-note {
+      grid-column: 3;
+      justify-self: end;
+      max-width: 26rem;
+      text-align: right;
     }
   }
 
-  .prow .thumb {
-    display: block;
-    border-radius: 6px;
-    overflow: hidden;
-    border: 1px solid var(--line);
-    aspect-ratio: 16 / 9;
+  .grid {
+    display: grid;
+    gap: clamp(3rem, 6vw, 4.5rem) clamp(1.5rem, 4vw, 3rem);
   }
 
-  .prow .thumb :global(img) {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    filter: grayscale(55%) contrast(1.02);
-    transition: filter 0.3s ease;
+  @media (min-width: 900px) {
+    .grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 
-  .prow:hover .thumb :global(img) {
-    filter: grayscale(0%) contrast(1.02);
+  @media (min-width: 1100px) {
+    /* Offset the second column for an editorial rhythm, once cards are wide enough. */
+    .grid > :global(:nth-child(even)) {
+      margin-top: 5rem;
+    }
   }
 
-  .prow .meta {
-    font-size: 0.72rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+  .empty {
     color: var(--muted);
-    margin: 0 0 0.35rem;
-  }
-
-  .prow h3 {
-    font-size: 1.1rem;
-    font-weight: 700;
-    margin: 0 0 0.4rem;
-  }
-
-  .prow h3 a {
-    text-decoration: none;
-  }
-
-  .prow h3 a::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-  }
-
-  .prow p.desc {
-    font-size: 0.9rem;
-    color: var(--ink-soft);
-    margin: 0 0 0.75rem;
-    max-width: 46ch;
-  }
-
-  .ext-link {
-    position: relative;
-    z-index: 1;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    font-size: 0.85rem;
-    font-weight: 600;
-    text-decoration: none;
-  }
-
-  .ext-link svg {
-    width: 14px;
-    height: 14px;
-    transition: transform 0.2s ease;
-  }
-
-  .ext-link:hover svg,
-  .ext-link:focus-visible svg {
-    transform: translate(2px, -2px);
   }
 </style>
-
-<script>
-  // Active section = the last one whose top has scrolled past 35% of the viewport.
-  // (A narrow IntersectionObserver band marked Projects active at page load whenever
-  // About was short enough to sit entirely above the band.)
-  function updateActiveSection() {
-    const sections = [...document.querySelectorAll<HTMLElement>('.content section[id]')];
-    const links = document.querySelectorAll<HTMLAnchorElement>('.section-nav a');
-    if (!sections.length || !links.length) return;
-
-    const threshold = window.innerHeight * 0.35;
-    let current = sections[0];
-    for (const section of sections) {
-      if (section.getBoundingClientRect().top <= threshold) current = section;
-    }
-    const atBottom =
-      window.scrollY > 0 && window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
-    if (atBottom) current = sections[sections.length - 1];
-
-    links.forEach((a) => a.classList.toggle('active', a.getAttribute('href') === `#${current.id}`));
-  }
-
-  // Module scripts run once per session under ClientRouter, so these attach once;
-  // on non-home pages the query finds nothing and it returns early.
-  document.addEventListener('astro:page-load', updateActiveSection);
-  document.addEventListener('scroll', updateActiveSection, { passive: true });
-  window.addEventListener('resize', updateActiveSection);
-</script>
