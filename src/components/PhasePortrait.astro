@@ -1,0 +1,451 @@
+---
+// Live phase portrait of the Van der Pol oscillator: a static vector field of
+// short dashes, and one trajectory integrated in real time that settles onto
+// the limit cycle. The pointer perturbs the state; a click/tap kicks it.
+//
+// The component fills its positioned parent. The cycle is fitted into the
+// first [data-pp-anchor] inside the nearest [data-pp-surface] (falling back
+// to the parent), so page CSS decides where the figure sits. An optional
+// [data-pp-readout] element in the surface receives the live state.
+
+interface Props {
+  mu?: number;
+  /** Initial state. Near the origin, the trajectory visibly spirals out. */
+  start?: [number, number];
+}
+
+const { mu = 1, start = [0.35, 0] } = Astro.props;
+---
+
+<div class="pp" data-phase-portrait data-mu={mu} data-start={start.join(',')}>
+  <canvas aria-hidden="true"></canvas>
+</div>
+
+<style>
+  .pp {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  canvas {
+    width: 100%;
+    height: 100%;
+  }
+</style>
+
+<script>
+  const SPACING = 30; // vector-field grid pitch (px)
+  const SIM_SPEED = 1.1; // simulated seconds per real second (period ≈ 6.7 at μ = 1)
+  const STEP = 1 / 240; // RK4 step in simulated seconds
+  const SAMPLE_EVERY = 0.02; // trail sample spacing in simulated seconds
+  const TRAIL = 420; // ≈ 1.25 periods
+  const HIGHLIGHT_R = 120; // px around the trajectory head where dashes light up
+  const PUSH_R = 1.1; // state-space radius of pointer influence
+  const PUSH = 2.6;
+  const DRAG = 0.35; // how much pointer velocity drags the state along
+  const KICK_GAIN = 9;
+  const KICK_MS = 160;
+
+  type Saved = { x: number; y: number; trail: Float32Array; len: number; head: number };
+  const sharedState = window as typeof window & {
+    __phaseHead?: { x: number; y: number };
+    __phaseHandoff?: number;
+    __phaseBounds?: { top: number; bottom: number };
+  };
+  const saved = new Map<string, Saved>();
+
+  function mount(root: HTMLElement): () => void {
+    const canvas = root.querySelector('canvas')!;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return () => {};
+    const field = document.createElement('canvas');
+    const fctx = field.getContext('2d')!;
+
+    const mu = Number(root.dataset.mu ?? 1);
+    const surface = root.closest<HTMLElement>('[data-pp-surface]') ?? root.parentElement!;
+    const anchor = surface.querySelector<HTMLElement>('[data-pp-anchor]') ?? surface;
+    const readout = surface.querySelector<HTMLElement>('[data-pp-readout]');
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const key = `${location.pathname}|${mu}`;
+
+    let w = 0;
+    let h = 0;
+    let dpr = 1;
+    let cx = 0;
+    let cy = 0;
+    let scale = 1;
+    let docLeft = 0;
+    let docTop = 0;
+    let fieldColor = '';
+    let accentRgb = '0,0,0';
+
+    const [sx, sy] = (root.dataset.start ?? '0.35,0').split(',').map(Number);
+    let x = sx;
+    let y = sy;
+    let trail = new Float32Array(TRAIL * 2);
+    let trailLen = 0;
+    let trailHead = 0;
+    let sampleClock = 0;
+
+    const prev = saved.get(key);
+    if (prev) {
+      ({ x, y, trail, len: trailLen, head: trailHead } = prev);
+    }
+
+    const pointer = { active: false, px: 0, py: 0, vx: 0, vy: 0, t: 0 };
+    let kick: { x: number; y: number; until: number } | null = null;
+    const rings: { x: number; y: number; t0: number }[] = [];
+
+    let raf = 0;
+    let last = 0;
+    let visible = true;
+    let lastReadout = 0;
+
+    const toScreenX = (sx: number) => cx + sx * scale;
+    const toScreenY = (sy: number) => cy - sy * scale;
+    const toStateX = (px: number) => (px - cx) / scale;
+    const toStateY = (py: number) => (cy - py) / scale;
+
+    function readColors() {
+      const style = getComputedStyle(root);
+      fieldColor = style.getPropertyValue('--pp-field').trim() || 'rgba(0,0,0,.15)';
+      accentRgb = style.getPropertyValue('--accent-rgb').trim() || '0,0,0';
+    }
+
+    function layout() {
+      const rect = root.getBoundingClientRect();
+      const a = anchor.getBoundingClientRect();
+      w = rect.width;
+      h = rect.height;
+      docLeft = rect.left + window.scrollX;
+      docTop = rect.top + window.scrollY;
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      for (const c of [canvas, field]) {
+        c.width = Math.round(w * dpr);
+        c.height = Math.round(h * dpr);
+      }
+      // The μ = 1 limit cycle spans x ∈ ±2.0, y ∈ ±2.7; pad so perturbations stay in frame.
+      scale = Math.max(24, Math.min(a.width / 5.4, a.height / 6.8));
+      cx = a.left - rect.left + a.width / 2;
+      cy = a.top - rect.top + a.height / 2;
+      // Vertical extent of the figure in document px (cycle spans ẋ ∈ ±2.7, padded for kicks),
+      // so page-level effects can tell when the whole loop has scrolled out of view.
+      sharedState.__phaseBounds = { top: docTop + cy - 3 * scale, bottom: docTop + cy + 3 * scale };
+      renderField();
+    }
+
+    function flow(px: number, py: number): [number, number] {
+      return [py, mu * (1 - px * px) * py - px];
+    }
+
+    function renderField() {
+      fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      fctx.clearRect(0, 0, w, h);
+      fctx.strokeStyle = fieldColor;
+      fctx.lineWidth = 1;
+      fctx.lineCap = 'round';
+      fctx.beginPath();
+      for (let gx = SPACING / 2; gx < w; gx += SPACING) {
+        for (let gy = SPACING / 2; gy < h; gy += SPACING) {
+          dash(fctx, gx, gy);
+        }
+      }
+      fctx.stroke();
+    }
+
+    function dash(c: CanvasRenderingContext2D, gx: number, gy: number) {
+      const [fx, fy] = flow(toStateX(gx), toStateY(gy));
+      const mag = Math.hypot(fx, fy);
+      if (mag < 1e-6) return;
+      const half = (2.5 + 3.5 * Math.tanh(mag / 2.5)) / 2;
+      const ux = (fx / mag) * half;
+      const uy = (-fy / mag) * half;
+      c.moveTo(gx - ux, gy - uy);
+      c.lineTo(gx + ux, gy + uy);
+    }
+
+    function deriv(px: number, py: number, now: number): [number, number] {
+      let [dx, dy] = flow(px, py);
+      if (pointer.active) {
+        const ox = px - toStateX(pointer.px);
+        const oy = py - toStateY(pointer.py);
+        const d = Math.hypot(ox, oy);
+        if (d < PUSH_R) {
+          const s = (1 - d / PUSH_R) ** 2;
+          const nx = d > 1e-4 ? ox / d : 0;
+          const ny = d > 1e-4 ? oy / d : 0;
+          dx += (nx * PUSH + pointer.vx * DRAG) * s;
+          dy += (ny * PUSH + pointer.vy * DRAG) * s;
+        }
+      }
+      if (kick && now < kick.until) {
+        dx += (kick.x - px) * KICK_GAIN;
+        dy += (kick.y - py) * KICK_GAIN;
+      }
+      return [dx, dy];
+    }
+
+    function pushSample() {
+      trail[trailHead * 2] = x;
+      trail[trailHead * 2 + 1] = y;
+      trailHead = (trailHead + 1) % TRAIL;
+      trailLen = Math.min(trailLen + 1, TRAIL);
+    }
+
+    function advance(dtReal: number, now: number) {
+      const simDt = dtReal * SIM_SPEED;
+      const steps = Math.max(1, Math.ceil(simDt / STEP));
+      const hh = simDt / steps;
+      for (let i = 0; i < steps; i++) {
+        const [k1x, k1y] = deriv(x, y, now);
+        const [k2x, k2y] = deriv(x + (hh / 2) * k1x, y + (hh / 2) * k1y, now);
+        const [k3x, k3y] = deriv(x + (hh / 2) * k2x, y + (hh / 2) * k2y, now);
+        const [k4x, k4y] = deriv(x + hh * k3x, y + hh * k3y, now);
+        x += (hh / 6) * (k1x + 2 * k2x + 2 * k3x + k4x);
+        y += (hh / 6) * (k1y + 2 * k2y + 2 * k3y + k4y);
+        sampleClock += hh;
+        if (sampleClock >= SAMPLE_EVERY) {
+          sampleClock -= SAMPLE_EVERY;
+          pushSample();
+        }
+      }
+      // A hard shove far outside the cycle is still stable, but keep it on-canvas.
+      if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > 6 || Math.abs(y) > 12) {
+        x = Math.max(-6, Math.min(6, Number.isFinite(x) ? x : 0.5));
+        y = Math.max(-12, Math.min(12, Number.isFinite(y) ? y : 0));
+      }
+      pointer.vx *= 0.88;
+      pointer.vy *= 0.88;
+    }
+
+    function draw(now: number) {
+      ctx!.setTransform(1, 0, 0, 1, 0, 0);
+      ctx!.clearRect(0, 0, canvas.width, canvas.height);
+      ctx!.drawImage(field, 0, 0);
+      ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      const hx = toScreenX(x);
+      const hy = toScreenY(y);
+      // Shared with page-level effects (e.g. a follower that picks the head up on scroll).
+      const shared = window as typeof window & { __phaseHead?: { x: number; y: number }; __phaseHandoff?: number };
+      shared.__phaseHead = { x: docLeft + hx, y: docTop + hy };
+      const headAlpha = 1 - (shared.__phaseHandoff ?? 0);
+
+      // Dashes near the head pick up the accent, showing the local flow it rides.
+      ctx!.lineCap = 'round';
+      ctx!.lineWidth = 1.25;
+      const g0x = Math.max(0, Math.floor((hx - HIGHLIGHT_R) / SPACING));
+      const g1x = Math.floor((hx + HIGHLIGHT_R) / SPACING);
+      const g0y = Math.max(0, Math.floor((hy - HIGHLIGHT_R) / SPACING));
+      const g1y = Math.floor((hy + HIGHLIGHT_R) / SPACING);
+      for (let i = g0x; i <= g1x; i++) {
+        const gx = SPACING / 2 + i * SPACING;
+        if (gx > w) break;
+        for (let j = g0y; j <= g1y; j++) {
+          const gy = SPACING / 2 + j * SPACING;
+          if (gy > h) break;
+          const d = Math.hypot(gx - hx, gy - hy);
+          if (d >= HIGHLIGHT_R) continue;
+          const a = (1 - d / HIGHLIGHT_R) ** 2 * 0.85 * headAlpha;
+          ctx!.strokeStyle = `rgba(${accentRgb},${a.toFixed(3)})`;
+          ctx!.beginPath();
+          dash(ctx!, gx, gy);
+          ctx!.stroke();
+        }
+      }
+
+      // Trail: oldest → newest in chunks, fading in and thickening toward the head.
+      if (trailLen > 1) {
+        const CHUNKS = 40;
+        const start = (trailHead - trailLen + TRAIL) % TRAIL;
+        const per = Math.ceil(trailLen / CHUNKS);
+        ctx!.lineJoin = 'round';
+        for (let c = 0; c < CHUNKS; c++) {
+          const from = c * per;
+          if (from >= trailLen - 1) break;
+          const to = Math.min(trailLen - 1, from + per);
+          const t = (c + 1) / CHUNKS;
+          // A still figure (reduced motion) shows the whole settled cycle evenly.
+          ctx!.strokeStyle = `rgba(${accentRgb},${(reduceMotion ? 0.8 : t ** 1.8 * 0.95).toFixed(3)})`;
+          ctx!.lineWidth = reduceMotion ? 1.5 : 0.75 + 1.25 * t;
+          ctx!.beginPath();
+          for (let k = from; k <= to; k++) {
+            const idx = ((start + k) % TRAIL) * 2;
+            const px = toScreenX(trail[idx]);
+            const py = toScreenY(trail[idx + 1]);
+            if (k === from) ctx!.moveTo(px, py);
+            else ctx!.lineTo(px, py);
+          }
+          if (c === CHUNKS - 1 || to === trailLen - 1) ctx!.lineTo(hx, hy);
+          ctx!.stroke();
+        }
+      }
+
+      // Head with a soft glow.
+      const glow = ctx!.createRadialGradient(hx, hy, 0, hx, hy, 22);
+      glow.addColorStop(0, `rgba(${accentRgb},${(0.35 * headAlpha).toFixed(3)})`);
+      glow.addColorStop(1, `rgba(${accentRgb},0)`);
+      ctx!.fillStyle = glow;
+      ctx!.beginPath();
+      ctx!.arc(hx, hy, 22, 0, Math.PI * 2);
+      ctx!.fill();
+      ctx!.fillStyle = `rgba(${accentRgb},${headAlpha.toFixed(3)})`;
+      ctx!.beginPath();
+      ctx!.arc(hx, hy, 3, 0, Math.PI * 2);
+      ctx!.fill();
+
+      // Kick markers.
+      for (let i = rings.length - 1; i >= 0; i--) {
+        const age = (now - rings[i].t0) / 700;
+        if (age >= 1) {
+          rings.splice(i, 1);
+          continue;
+        }
+        const ease = 1 - (1 - age) ** 3;
+        ctx!.strokeStyle = `rgba(${accentRgb},${((1 - age) * 0.6).toFixed(3)})`;
+        ctx!.lineWidth = 1;
+        ctx!.beginPath();
+        ctx!.arc(rings[i].x, rings[i].y, 4 + ease * 34, 0, Math.PI * 2);
+        ctx!.stroke();
+      }
+
+      if (readout && now - lastReadout > 90) {
+        lastReadout = now;
+        readout.textContent = `x ${fmt(x)}   ẋ ${fmt(y)}`;
+      }
+    }
+
+    function fmt(v: number) {
+      return (v < 0 ? '−' : '+') + Math.abs(v).toFixed(2);
+    }
+
+    function frame(now: number) {
+      const dt = last ? Math.min(0.05, (now - last) / 1000) : 0;
+      last = now;
+      advance(dt, now);
+      draw(now);
+      raf = requestAnimationFrame(frame);
+    }
+
+    function start() {
+      if (reduceMotion || raf || !visible || document.hidden) return;
+      last = 0;
+      raf = requestAnimationFrame(frame);
+    }
+
+    function stop() {
+      cancelAnimationFrame(raf);
+      raf = 0;
+    }
+
+    // Reduced motion: draw one settled cycle as a still figure.
+    function drawStill() {
+      if (!prev) {
+        x = 2;
+        y = 0;
+        for (let i = 0; i < 240 * 20; i++) advance(1 / 240 / SIM_SPEED, 0);
+        trailLen = 0;
+        const period = Math.round(6.66 / SAMPLE_EVERY);
+        for (let i = 0; i < Math.min(period, TRAIL); i++) {
+          for (let s = 0; s < 5; s++) advance(SAMPLE_EVERY / 5 / SIM_SPEED, 0);
+        }
+      }
+      draw(performance.now());
+    }
+
+    // ── Input ────────────────────────────────────────────────────────────
+    const isInteractive = (t: EventTarget | null) =>
+      t instanceof Element && !!t.closest('a, button, input, label, select, textarea');
+
+    function onPointerMove(e: PointerEvent) {
+      if (e.pointerType !== 'mouse') return;
+      const rect = canvas.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      const now = performance.now();
+      if (pointer.active && now > pointer.t) {
+        const dt = Math.max(8, now - pointer.t) / 1000;
+        pointer.vx = pointer.vx * 0.5 + ((px - pointer.px) / scale / dt) * 0.5;
+        pointer.vy = pointer.vy * 0.5 + (-(py - pointer.py) / scale / dt) * 0.5;
+      }
+      pointer.px = px;
+      pointer.py = py;
+      pointer.t = now;
+      pointer.active = true;
+    }
+
+    function onPointerLeave() {
+      pointer.active = false;
+    }
+
+    function onPointerDown(e: PointerEvent) {
+      if (e.button !== 0 || isInteractive(e.target) || reduceMotion) return;
+      const rect = canvas.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      const now = performance.now();
+      kick = { x: toStateX(px), y: toStateY(py), until: now + KICK_MS };
+      rings.push({ x: px, y: py, t0: now });
+    }
+
+    readColors();
+    layout();
+
+    const resizeObserver = new ResizeObserver(() => {
+      layout();
+      if (reduceMotion) drawStill();
+    });
+    resizeObserver.observe(root);
+
+    const themeObserver = new MutationObserver(() => {
+      readColors();
+      renderField();
+      if (reduceMotion) drawStill();
+    });
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+    const io = new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
+      if (visible) start();
+      else stop();
+    });
+    io.observe(root);
+
+    const onVisibility = () => (document.hidden ? stop() : start());
+    document.addEventListener('visibilitychange', onVisibility);
+    surface.addEventListener('pointermove', onPointerMove);
+    surface.addEventListener('pointerleave', onPointerLeave);
+    surface.addEventListener('pointerdown', onPointerDown);
+
+    if (reduceMotion) drawStill();
+    else start();
+
+    return () => {
+      stop();
+      saved.set(key, { x, y, trail, len: trailLen, head: trailHead });
+      resizeObserver.disconnect();
+      themeObserver.disconnect();
+      io.disconnect();
+      document.removeEventListener('visibilitychange', onVisibility);
+      surface.removeEventListener('pointermove', onPointerMove);
+      surface.removeEventListener('pointerleave', onPointerLeave);
+      surface.removeEventListener('pointerdown', onPointerDown);
+      sharedState.__phaseHead = undefined;
+      sharedState.__phaseHandoff = 0;
+      sharedState.__phaseBounds = undefined;
+    };
+  }
+
+  let cleanups: (() => void)[] = [];
+
+  document.addEventListener('astro:page-load', () => {
+    document.querySelectorAll<HTMLElement>('[data-phase-portrait]').forEach((el) => cleanups.push(mount(el)));
+  });
+
+  document.addEventListener('astro:before-swap', () => {
+    cleanups.forEach((fn) => fn());
+    cleanups = [];
+  });
+</script>

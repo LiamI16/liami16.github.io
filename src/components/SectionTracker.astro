@@ -1,0 +1,279 @@
+---
+// Section tracker: one orange dot just left of the content edge, level with
+// the section being read (or resting under the header once that heading has
+// scrolled away). It springs between sections with the site's ζ and leaves a
+// short fading trail, in the same visual language as the hero's trajectory head.
+//
+// On the home page it is the same dot as that head, handed over without any
+// travel: it fades in only once the whole loop has scrolled under the header,
+// and fades out before the loop reappears — never visible alongside it.
+//
+// Needs a real left gutter; on narrow screens only the card highlighting runs
+// (a project's status dot lights while its title is the current section).
+---
+
+<canvas class="section-tracker" data-section-tracker aria-hidden="true" transition:persist></canvas>
+
+<style>
+  .section-tracker {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 45;
+    pointer-events: none;
+  }
+</style>
+
+<script>
+  import { DEFAULT_ZETA, naturalFrequency } from '../lib/spring';
+
+  // y: where the dot rests (level with the heading) · at: where the section begins, i.e. the
+  // point that must cross the activation line — for a project card, the top of its cover.
+  type Target = { y: number; at: number; x: number; card: Element | null };
+
+  const MIN_GUTTER = 88; // content must start at least this far from the viewport edge
+  const OFFSET = 48; // the dot sits this far left of the content edge
+  const PARK_GAP = 22; // resting spot under the header once the current heading has scrolled away
+  const ACTIVATE_AT = 0.38; // a heading becomes current as it crosses this fraction of the viewport
+  const RETURN_GAP = 24; // hysteresis: the loop must show this much before the dot hands back
+  const TRAIL_MS = 420;
+
+  const shared = window as typeof window & {
+    __phaseHandoff?: number;
+    __phaseBounds?: { top: number; bottom: number };
+  };
+
+  const canvas = document.querySelector<HTMLCanvasElement>('[data-section-tracker]');
+  const ctx = canvas?.getContext('2d');
+
+  if (canvas && ctx) {
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+    let W = 0;
+    let H = 0;
+    let dpr = 1;
+    let accent = '194,65,12';
+    let headerH = 64;
+    let dotX = 0;
+    let enabled = false;
+    let targets: Target[] = []; // where the dot can rest: headings on the content's left edge
+    let cardTitles: Target[] = []; // every project title, for card highlighting
+    let activeCard: Element | null = null;
+
+    const dot = { y: NaN, vy: 0 }; // y in document px, so a dot level with a heading stays glued to it
+    let alpha = 0; // visibility, faded in and out
+    let owned = false; // true while the tracker (not the portrait) shows the dot
+    let portraitOnPage = false;
+    const trail: { x: number; y: number; t: number }[] = []; // viewport px
+
+    let raf = 0;
+    let lastT = 0;
+
+    function zeta() {
+      const v = Number(document.querySelector<HTMLInputElement>('[data-zeta-input]')?.value);
+      return Number.isFinite(v) && v > 0 ? v : DEFAULT_ZETA;
+    }
+
+    function readColors() {
+      accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-rgb').trim() || accent;
+    }
+
+    function measure() {
+      W = window.innerWidth;
+      H = window.innerHeight;
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas!.width = Math.round(W * dpr);
+      canvas!.height = Math.round(H * dpr);
+      headerH = document.querySelector('[data-site-header]')?.getBoundingClientRect().height ?? 64;
+
+      const sel = document.querySelector('.prose')
+        ? 'article h1, .prose h2, .prose h3'
+        : document.querySelector('.hero')
+          ? '.hero h1, #work-title, .card h3'
+          : 'main h1, main h2';
+      // Layout position via the offset chain, which ignores transforms — cards are mid
+      // scroll-in animation (translated) when measured, and bounding rects would include that.
+      const docOffset = (el: HTMLElement) => {
+        let x = 0;
+        let y = 0;
+        for (let n: HTMLElement | null = el; n; n = n.offsetParent as HTMLElement | null) {
+          x += n.offsetLeft;
+          y += n.offsetTop;
+        }
+        return { x, y };
+      };
+      const all = [...document.querySelectorAll<HTMLElement>(sel)].map((el) => {
+        const { x, y } = docOffset(el);
+        const card = el.closest<HTMLElement>('.card');
+        const mid = y + el.offsetHeight / 2;
+        return { y: mid, at: card ? docOffset(card).y : mid, x: x - window.scrollX, card };
+      });
+      const contentLeft = all.length ? Math.min(...all.map((t) => t.x)) : 0;
+      // In a two-column grid, right-column titles sit beside the left card's body text; a dot
+      // in the left gutter level with them would read as marking the wrong card. The dot rests
+      // only beside left-edge headings; every card still lights up as its own title passes.
+      targets = all.filter((t) => t.x <= contentLeft + 40);
+      cardTitles = all.filter((t) => t.card);
+      dotX = contentLeft - OFFSET;
+      enabled = contentLeft >= MIN_GUTTER;
+    }
+
+    /** Last target past the activation line; `fallback` when none has crossed yet. */
+    function activeIndex(list: Target[], sy: number, fallback: number) {
+      if (!list.length) return -1;
+      if (sy + H >= document.documentElement.scrollHeight - 4) return list.length - 1;
+      let idx = fallback;
+      for (let i = 0; i < list.length; i++) if (list[i].at <= sy + H * ACTIVATE_AT) idx = i;
+      return idx;
+    }
+
+    function setActiveCard(card: Element | null) {
+      if (card === activeCard) return;
+      activeCard?.removeAttribute('data-active');
+      card?.setAttribute('data-active', '');
+      activeCard = card;
+    }
+
+    function frame(now: number) {
+      const dt = lastT ? Math.min(0.05, (now - lastT) / 1000) : 1 / 60;
+      lastT = now;
+      const sy = window.scrollY;
+      const idx = activeIndex(targets, sy, 0);
+      const lit = activeIndex(cardTitles, sy, -1);
+      setActiveCard(lit >= 0 ? cardTitles[lit].card : null);
+
+      if (!enabled || idx < 0) {
+        owned = false;
+        alpha = 0;
+        shared.__phaseHandoff = 0;
+      } else {
+        // With a phase portrait on the page, the dot belongs to the trajectory until the whole
+        // loop has scrolled under the header; it hands back as soon as the loop starts to return.
+        const bounds = portraitOnPage ? shared.__phaseBounds : undefined;
+        const loopBelowHeader = bounds ? bounds.bottom - sy - headerH : Infinity;
+        const want = !portraitOnPage || (!!bounds && loopBelowHeader < (owned ? RETURN_GAP : 0));
+
+        const target = clamp(targets[idx].y, sy + headerH + PARK_GAP, sy + H * 0.82);
+        if (want && !owned) {
+          owned = true; // appear in place: no travel across the page
+          dot.y = target;
+          dot.vy = 0;
+          trail.length = 0;
+        }
+        if (Number.isNaN(dot.y)) dot.y = target;
+
+        if (reduceMotion) {
+          dot.y = target;
+          dot.vy = 0;
+          alpha = want ? 1 : 0;
+        } else {
+          const z = zeta();
+          const omega = naturalFrequency(z) / 0.9; // same time scale as --dur (900ms)
+          const steps = 10;
+          const h = dt / steps;
+          for (let i = 0; i < steps; i++) {
+            dot.vy += (omega * omega * (target - dot.y) - 2 * z * omega * dot.vy) * h;
+            dot.y += dot.vy * h;
+          }
+          alpha += ((want ? 1 : 0) - alpha) * Math.min(1, dt * 9);
+          // Sample every frame: a resting dot adds zero-length trail, a moving one a continuous streak.
+          if (alpha > 0.5) trail.push({ x: dotX, y: dot.y - sy, t: now });
+        }
+
+        if (!want && owned && alpha < 0.02) {
+          owned = false;
+          alpha = 0;
+        }
+        shared.__phaseHandoff = owned ? 1 : 0;
+      }
+
+      while (trail.length && now - trail[0].t > TRAIL_MS) trail.shift();
+      draw(sy, now);
+      raf = requestAnimationFrame(frame);
+    }
+
+    function draw(sy: number, now: number) {
+      ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx!.clearRect(0, 0, W, H);
+      if (!enabled || alpha < 0.01 || Number.isNaN(dot.y)) return;
+      const minY = headerH + 8;
+
+      const y = clamp(dot.y - sy, minY, H - 10);
+
+      // One continuous stroke from the oldest sample to the dot, fading out toward the tail.
+      if (trail.length > 1) {
+        const tailY = clamp(trail[0].y, minY, H);
+        if (Math.abs(y - tailY) > 1) {
+          const fade = ctx!.createLinearGradient(0, tailY, 0, y);
+          fade.addColorStop(0, `rgba(${accent},0)`);
+          fade.addColorStop(1, `rgba(${accent},${(0.55 * alpha).toFixed(3)})`);
+          ctx!.strokeStyle = fade;
+          ctx!.lineWidth = 1.5;
+          ctx!.lineCap = 'butt';
+          ctx!.lineJoin = 'round';
+          ctx!.beginPath();
+          ctx!.moveTo(dotX, tailY);
+          for (let i = 1; i < trail.length; i++) ctx!.lineTo(dotX, clamp(trail[i].y, minY, H));
+          ctx!.lineTo(dotX, y);
+          ctx!.stroke();
+        }
+      }
+      const glow = ctx!.createRadialGradient(dotX, y, 0, dotX, y, 18);
+      glow.addColorStop(0, `rgba(${accent},${(0.35 * alpha).toFixed(3)})`);
+      glow.addColorStop(1, `rgba(${accent},0)`);
+      ctx!.fillStyle = glow;
+      ctx!.beginPath();
+      ctx!.arc(dotX, y, 18, 0, Math.PI * 2);
+      ctx!.fill();
+      ctx!.fillStyle = `rgba(${accent},${alpha.toFixed(3)})`;
+      ctx!.beginPath();
+      ctx!.arc(dotX, y, 3 * (0.6 + 0.4 * alpha), 0, Math.PI * 2);
+      ctx!.fill();
+    }
+
+    function start() {
+      if (!raf) {
+        lastT = 0;
+        raf = requestAnimationFrame(frame);
+      }
+    }
+
+    let remeasure = 0;
+    const scheduleMeasure = () => {
+      clearTimeout(remeasure);
+      remeasure = window.setTimeout(measure, 120);
+    };
+
+    new ResizeObserver(scheduleMeasure).observe(document.body);
+    window.addEventListener('resize', scheduleMeasure);
+    new MutationObserver(readColors).observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+
+    document.addEventListener('astro:before-swap', () => setActiveCard(null));
+
+    document.addEventListener('astro:page-load', () => {
+      portraitOnPage = !!document.querySelector('[data-phase-portrait]');
+      owned = false;
+      alpha = 0;
+      dot.y = NaN;
+      dot.vy = 0;
+      trail.length = 0;
+      activeCard = null;
+      readColors();
+      measure();
+      setTimeout(measure, 700); // late fonts and image sizes
+      start();
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      } else start();
+    });
+  }
+</script>
