@@ -35,7 +35,7 @@ const ogImage = cover.format === 'svg' ? undefined : (await getImage({ src: cove
         {draft && <span class="draft">Draft — still in progress</span>}
       </p>
 
-      <h1 transition:name={`title-${project.id}`}>{title}</h1>
+      <h1>{title}</h1>
       <p class="summary fade-up" style="--i: 1">{summary}</p>
 
       <div class="facts fade-up" style="--i: 2">
@@ -67,7 +67,7 @@ const ogImage = cover.format === 'svg' ? undefined : (await getImage({ src: cove
         widths={[640, 1100, 1600]}
         sizes="(min-width: 72rem) 67rem, 100vw"
         loading="eager"
-        transition:name={`cover-${project.id}`}
+        data-vt-cover={project.id}
         style="view-transition-class: vt-cover"
       />
     </figure>
@@ -417,7 +417,6 @@ const ogImage = cover.format === 'svg' ? undefined : (await getImage({ src: cove
 <script>
   let article: HTMLElement | null = null;
   let header: HTMLElement | null = null;
-  let tocObserver: IntersectionObserver | null = null;
 
   function updateProgress() {
     if (!article || !header) return;
@@ -427,32 +426,35 @@ const ogImage = cover.format === 'svg' ? undefined : (await getImage({ src: cove
     header.style.setProperty('--progress', pct.toFixed(4));
   }
 
-  function initToc() {
-    tocObserver?.disconnect();
+  // Highlight the section being read: the last heading whose midline has crossed 38% of the
+  // viewport (the last one at the page bottom). Computed from positions on every scroll, so it
+  // stays right after jumps (TOC clicks, scrollbar drags) that a scroll-band observer misses.
+  let tocFrame = 0;
+
+  function updateToc() {
+    tocFrame = 0;
     const links = document.querySelectorAll<HTMLAnchorElement>('[data-toc-link]');
     if (!links.length) return;
-    const targets = [...links]
-      .map((a) => document.getElementById(a.dataset.tocLink!))
-      .filter((el): el is HTMLElement => !!el);
-
-    tocObserver = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          links.forEach((a) => a.setAttribute('aria-current', String(a.dataset.tocLink === entry.target.id)));
-        }
-      },
-      { rootMargin: '-15% 0px -70% 0px' },
-    );
-    targets.forEach((t) => tocObserver!.observe(t));
+    const atBottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 4;
+    let id: string | null = null;
+    links.forEach((a) => {
+      const h = document.getElementById(a.dataset.tocLink!);
+      if (!h) return;
+      const r = h.getBoundingClientRect();
+      if (atBottom || r.top + r.height / 2 <= window.innerHeight * 0.38) id = a.dataset.tocLink!;
+    });
+    links.forEach((a) => a.setAttribute('aria-current', String(a.dataset.tocLink === id)));
   }
+
+  const scheduleToc = () => {
+    if (!tocFrame) tocFrame = requestAnimationFrame(updateToc);
+  };
 
   document.addEventListener('astro:page-load', () => {
     article = document.getElementById('article');
     header = document.querySelector('[data-site-header]');
     updateProgress();
-    if (article) initToc();
-    else tocObserver?.disconnect();
+    updateToc();
   });
 
   const w = window as typeof window & { __progressBound?: boolean };
@@ -460,5 +462,7 @@ const ogImage = cover.format === 'svg' ? undefined : (await getImage({ src: cove
     w.__progressBound = true;
     document.addEventListener('scroll', updateProgress, { passive: true });
     window.addEventListener('resize', updateProgress);
+    document.addEventListener('scroll', scheduleToc, { passive: true });
+    window.addEventListener('resize', scheduleToc);
   }
 </script>

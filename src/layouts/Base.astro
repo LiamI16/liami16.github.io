@@ -2,7 +2,6 @@
 import { ClientRouter } from 'astro:transitions';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
-import SectionTracker from '../components/SectionTracker.astro';
 import '../styles/global.css';
 
 interface Props {
@@ -69,6 +68,14 @@ const ogImage = new URL(image, Astro.site);
           document.addEventListener('astro:before-swap', (e) => {
             apply(e.newDocument);
             e.newDocument.documentElement.dataset.softNav = '';
+            // Scroll restoration must land instantly, not smooth-scroll from the top (the home
+            // tree would follow that fake scroll). Smooth scrolling returns once the page is in.
+            e.newDocument.documentElement.dataset.navigating = '';
+          });
+          document.addEventListener('astro:page-load', () => {
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() => delete document.documentElement.dataset.navigating),
+            );
           });
         }
       })();
@@ -83,6 +90,24 @@ const ogImage = new URL(image, Astro.site);
       <slot />
     </main>
     <Footer />
-    <SectionTracker />
   </body>
 </html>
+
+<script>
+  // Page transitions morph exactly one element: the cover of the project being opened (home → project)
+  // or returned from (project → home). Names are assigned per navigation, on the old page before its
+  // snapshot and on the incoming page before the swap, so no other card leaves a fading ghost behind.
+  const slugOf = (url: URL) => url.pathname.match(/^\/projects\/([^/]+)\/?$/)?.[1] ?? null;
+  const isHome = (url: URL) => url.pathname === '/';
+
+  function nameCover(doc: Document, from: URL, to: URL) {
+    doc.querySelectorAll<HTMLElement>('[data-vt-cover]').forEach((el) => (el.style.viewTransitionName = ''));
+    const slug = isHome(from) ? slugOf(to) : isHome(to) ? slugOf(from) : null;
+    if (!slug) return;
+    const el = doc.querySelector<HTMLElement>(`[data-vt-cover="${CSS.escape(slug)}"]`);
+    if (el) el.style.viewTransitionName = `cover-${slug}`;
+  }
+
+  document.addEventListener('astro:before-preparation', (e) => nameCover(document, e.from, e.to));
+  document.addEventListener('astro:before-swap', (e) => nameCover(e.newDocument, e.from, e.to));
+</script>

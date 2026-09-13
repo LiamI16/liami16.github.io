@@ -75,6 +75,11 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+/* During a page navigation: restore / reset scroll instantly. */
+html[data-navigating] {
+  scroll-behavior: auto;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -471,6 +476,38 @@ html[data-soft-nav] .fade-up {
   height: 100%;
   object-fit: cover;
   overflow: clip;
+}
+
+/* ─── Reading head ───────────────────────────────────────────────────── */
+
+/* The home tree's head. Positioned by script; part of the page, so a page transition simply
+   crossfades it out with the rest of the home page while the cover morphs. */
+.tracer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 46;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* Same glow as the portrait's canvas head (radius 22px, 0.35 → 0), so a handoff has no seam. */
+.tracer::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  border-radius: 50%;
+  background: radial-gradient(circle closest-side, rgba(var(--accent-rgb), 0.35), rgba(var(--accent-rgb), 0));
 }
 
 /* ─── Reduced motion ─────────────────────────────────────────────────── */
