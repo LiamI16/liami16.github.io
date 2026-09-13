@@ -51,6 +51,9 @@ const { mu = 1, start = [0.35, 0] } = Astro.props;
   type Saved = { x: number; y: number; trail: Float32Array; len: number; head: number };
   const sharedState = window as typeof window & {
     __phaseHead?: { x: number; y: number };
+    __phaseHeadDir?: { x: number; y: number };
+    __phaseTracer?: { x: number; y: number };
+    __phasePlan?: () => { pts: { x: number; y: number }[]; dir: { x: number; y: number } };
     __phaseHandoff?: number;
     __phaseBounds?: { top: number; bottom: number };
   };
@@ -187,6 +190,34 @@ const { mu = 1, start = [0.35, 0] } = Astro.props;
       return [dx, dy];
     }
 
+    // The head's own future, for the home tree: integrate the free dynamics (no pointer) from the
+    // current state until the head next passes the bottom of the loop — where it moves left,
+    // toward the page's centre. Document px, starting exactly at the head.
+    function plan() {
+      let px = x;
+      let py = y;
+      const hh = 1 / 240;
+      const at = () => ({ x: docLeft + toScreenX(px), y: docTop + toScreenY(py) });
+      const pts = [at()];
+      let prevDy = flow(px, py)[1];
+      for (let i = 1; i <= 240 * 14; i++) {
+        const [k1x, k1y] = flow(px, py);
+        const [k2x, k2y] = flow(px + (hh / 2) * k1x, py + (hh / 2) * k1y);
+        const [k3x, k3y] = flow(px + (hh / 2) * k2x, py + (hh / 2) * k2y);
+        const [k4x, k4y] = flow(px + hh * k3x, py + hh * k3y);
+        px += (hh / 6) * (k1x + 2 * k2x + 2 * k3x + k4x);
+        py += (hh / 6) * (k1y + 2 * k2y + 2 * k3y + k4y);
+        const dy = flow(px, py)[1];
+        const done = i > 24 && py < 0 && prevDy < 0 && dy >= 0;
+        if (i % 2 === 0 || done) pts.push(at());
+        prevDy = dy;
+        if (done) break;
+      }
+      const [fx, fy] = flow(px, py);
+      const m = Math.hypot(fx, fy) || 1;
+      return { pts, dir: { x: fx / m, y: -fy / m } };
+    }
+
     function pushSample() {
       trail[trailHead * 2] = x;
       trail[trailHead * 2 + 1] = y;
@@ -228,27 +259,32 @@ const { mu = 1, start = [0.35, 0] } = Astro.props;
 
       const hx = toScreenX(x);
       const hy = toScreenY(y);
-      // Shared with page-level effects (e.g. a follower that picks the head up on scroll).
-      const shared = window as typeof window & { __phaseHead?: { x: number; y: number }; __phaseHandoff?: number };
-      shared.__phaseHead = { x: docLeft + hx, y: docTop + hy };
-      const headAlpha = 1 - (shared.__phaseHandoff ?? 0);
+      // Shared with the home tree, which takes the head over (handoff = 1) and continues it along
+      // this trajectory's own future. While it's away the loop pauses and the field keeps lighting
+      // up around wherever the tree has the head.
+      sharedState.__phaseHead = { x: docLeft + hx, y: docTop + hy };
+      const away = !!sharedState.__phaseHandoff;
+      const headAlpha = away ? 0 : 1;
+      const tracer = sharedState.__phaseTracer;
+      const litX = away && tracer ? tracer.x - docLeft : hx;
+      const litY = away && tracer ? tracer.y - docTop : hy;
 
       // Dashes near the head pick up the accent, showing the local flow it rides.
       ctx!.lineCap = 'round';
       ctx!.lineWidth = 1.25;
-      const g0x = Math.max(0, Math.floor((hx - HIGHLIGHT_R) / SPACING));
-      const g1x = Math.floor((hx + HIGHLIGHT_R) / SPACING);
-      const g0y = Math.max(0, Math.floor((hy - HIGHLIGHT_R) / SPACING));
-      const g1y = Math.floor((hy + HIGHLIGHT_R) / SPACING);
+      const g0x = Math.max(0, Math.floor((litX - HIGHLIGHT_R) / SPACING));
+      const g1x = Math.floor((litX + HIGHLIGHT_R) / SPACING);
+      const g0y = Math.max(0, Math.floor((litY - HIGHLIGHT_R) / SPACING));
+      const g1y = Math.floor((litY + HIGHLIGHT_R) / SPACING);
       for (let i = g0x; i <= g1x; i++) {
         const gx = SPACING / 2 + i * SPACING;
         if (gx > w) break;
         for (let j = g0y; j <= g1y; j++) {
           const gy = SPACING / 2 + j * SPACING;
           if (gy > h) break;
-          const d = Math.hypot(gx - hx, gy - hy);
+          const d = Math.hypot(gx - litX, gy - litY);
           if (d >= HIGHLIGHT_R) continue;
-          const a = (1 - d / HIGHLIGHT_R) ** 2 * 0.85 * headAlpha;
+          const a = (1 - d / HIGHLIGHT_R) ** 2 * 0.85;
           ctx!.strokeStyle = `rgba(${accentRgb},${a.toFixed(3)})`;
           ctx!.beginPath();
           dash(ctx!, gx, gy);
@@ -268,8 +304,9 @@ const { mu = 1, start = [0.35, 0] } = Astro.props;
           const to = Math.min(trailLen - 1, from + per);
           const t = (c + 1) / CHUNKS;
           // A still figure (reduced motion) shows the whole settled cycle evenly.
-          ctx!.strokeStyle = `rgba(${accentRgb},${(reduceMotion ? 0.8 : t ** 1.8 * 0.95).toFixed(3)})`;
-          ctx!.lineWidth = reduceMotion ? 1.5 : 0.75 + 1.25 * t;
+          // Newest segment (t = 1) is 1.75px at 0.9 — identical to the home tree's line behind the head.
+          ctx!.strokeStyle = `rgba(${accentRgb},${(reduceMotion ? 0.8 : t ** 1.8 * 0.9).toFixed(3)})`;
+          ctx!.lineWidth = reduceMotion ? 1.5 : 0.75 + 1.0 * t;
           ctx!.beginPath();
           for (let k = from; k <= to; k++) {
             const idx = ((start + k) % TRAIL) * 2;
@@ -324,7 +361,8 @@ const { mu = 1, start = [0.35, 0] } = Astro.props;
     function frame(now: number) {
       const dt = last ? Math.min(0.05, (now - last) / 1000) : 0;
       last = now;
-      advance(dt, now);
+      // Paused while the head is out on the tree, so it re-enters exactly where it left.
+      if (!sharedState.__phaseHandoff) advance(dt, now);
       draw(now);
       raf = requestAnimationFrame(frame);
     }
@@ -392,6 +430,7 @@ const { mu = 1, start = [0.35, 0] } = Astro.props;
 
     readColors();
     layout();
+    sharedState.__phasePlan = plan;
 
     const resizeObserver = new ResizeObserver(() => {
       layout();
@@ -415,6 +454,9 @@ const { mu = 1, start = [0.35, 0] } = Astro.props;
 
     const onVisibility = () => (document.hidden ? stop() : start());
     document.addEventListener('visibilitychange', onVisibility);
+    // Redraw synchronously so the head disappears/reappears in the same frame the tree's head does.
+    const onHandoff = () => draw(performance.now());
+    window.addEventListener('phase:handoff', onHandoff);
     surface.addEventListener('pointermove', onPointerMove);
     surface.addEventListener('pointerleave', onPointerLeave);
     surface.addEventListener('pointerdown', onPointerDown);
@@ -429,19 +471,29 @@ const { mu = 1, start = [0.35, 0] } = Astro.props;
       themeObserver.disconnect();
       io.disconnect();
       document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('phase:handoff', onHandoff);
       surface.removeEventListener('pointermove', onPointerMove);
       surface.removeEventListener('pointerleave', onPointerLeave);
       surface.removeEventListener('pointerdown', onPointerDown);
       sharedState.__phaseHead = undefined;
       sharedState.__phaseHandoff = 0;
       sharedState.__phaseBounds = undefined;
+      sharedState.__phaseHeadDir = undefined;
+      sharedState.__phasePlan = undefined;
     };
   }
 
   let cleanups: (() => void)[] = [];
 
-  document.addEventListener('astro:page-load', () => {
+  function mountAll() {
+    if (cleanups.length) return;
     document.querySelectorAll<HTMLElement>('[data-phase-portrait]').forEach((el) => cleanups.push(mount(el)));
+  }
+
+  // after-swap too, so the home tree can take the head over before a page transition snapshots.
+  document.addEventListener('astro:after-swap', mountAll);
+  document.addEventListener('astro:page-load', () => {
+    mountAll();
   });
 
   document.addEventListener('astro:before-swap', () => {

@@ -11,7 +11,7 @@ The résumé covers the at-a-glance view; this site goes in depth.
 - Home: phase-portrait hero, project card grid with category/status meta
 - Post layout: sticky TOC, reading progress, figure/table/quote/code styles (dual Shiki themes), next-project link
 - Motion: ζ-parameterized spring easing, staged intro, scroll-driven card reveals, card → article view-transition morph
-- Section tracker: gutter dot level with the current heading; fades in once the hero loop has scrolled away
+- Home tree: the hero trajectory continues into a spine; projects grow off it as the head arrives
 - Tonal depth: grain, hero spotlight, deepening section tones, cover-coloured glows
 - Fluid sizing: root type and page width scale on large screens; hero sized by viewport height
 - Default OG image, favicon + apple-touch-icon, 404 page, reduced-motion fallbacks

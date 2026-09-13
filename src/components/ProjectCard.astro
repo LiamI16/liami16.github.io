@@ -21,7 +21,7 @@ const href = `/projects/${project.id}/`;
       alt={coverAlt}
       widths={[480, 760, 1100]}
       sizes="(min-width: 760px) 34rem, 100vw"
-      transition:name={`cover-${project.id}`}
+      data-vt-cover={project.id}
       style="view-transition-class: vt-cover"
     />
     <span class="index mono">{String(index + 1).padStart(2, '0')}</span>
@@ -35,7 +35,7 @@ const href = `/projects/${project.id}/`;
       {draft && <span class="draft">Draft</span>}
     </p>
     <h3>
-      <a href={href} transition:name={`title-${project.id}`}>{title}</a>
+      <a href={href}>{title}</a>
     </h3>
     <p class="summary">{summary}</p>
     <p class="mono stack">{stack.slice(0, 4).join(' / ')}</p>
@@ -190,21 +190,4 @@ const href = `/projects/${project.id}/`;
     color: var(--muted);
   }
 
-  @supports (animation-timeline: view()) {
-    @media (prefers-reduced-motion: no-preference) {
-      .card {
-        animation: card-in linear both;
-        animation-timeline: view();
-        animation-range: entry 0% entry 45%;
-      }
-
-      @keyframes card-in {
-        from {
-          opacity: 0;
-          transform: translateY(48px);
-          animation-timing-function: var(--ease-out);
-        }
-      }
-    }
-  }
 </style>

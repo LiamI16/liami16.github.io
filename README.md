@@ -26,11 +26,9 @@ excluded from the production build.
 - **Motion** (`src/lib/spring.ts`): every transition uses one spring step
   response baked into a CSS `linear()` easing (`--ease-spring`, ζ = 1, critically damped).
   The footer ζ slider regenerates it at runtime.
-- **Section tracker** (`src/components/SectionTracker.astro`): one orange dot
-  just left of the content edge, level with the current section's heading. On
-  the home page it is handed over from the phase portrait's trajectory head
-  without travelling: it fades in once the whole loop has scrolled under the
-  header, and fades out before the loop reappears.
+- **Tree** (`src/components/TreeTracker.astro`): on the home page the phase
+  portrait's head leaves the loop on scroll, following its own trajectory into a
+  spine through the work section; each project grows off it as the head arrives.
 - **Résumé link** appears in the header automatically once `public/resume.pdf` exists.
 - `public/og.png` is the default social preview; project pages use their cover.
 
