@@ -12,6 +12,9 @@ const projects = defineCollection({
       stack: z.array(z.string()),
       cover: image(),
       coverAlt: z.string(),
+      // Short labels shown in the card/header meta line, e.g. "Research", "Under review · ACC 2026".
+      category: z.string().optional(),
+      status: z.string().optional(),
       repo: z.url().optional(),
       demo: z.url().optional(),
       featured: z.boolean().default(false),
