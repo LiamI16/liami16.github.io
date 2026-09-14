@@ -20,6 +20,8 @@
   <path class="ghost" data-tree-ghost></path>
   <path class="dim" data-tree-dim></path>
   <g data-tree-branches></g>
+  <!-- The spine's root: marks where the trajectory joins it, so a grown spine never looks cut off. -->
+  <circle class="node root" data-tree-root r="0"></circle>
   <path class="strong" data-tree-strong></path>
 </svg>
 <span class="tracer home-tracer" data-tree-tracer aria-hidden="true"></span>
@@ -206,6 +208,7 @@
     const dimEl = svg.querySelector<SVGPathElement>('[data-tree-dim]')!;
     const ghostEl = svg.querySelector<SVGPathElement>('[data-tree-ghost]')!;
     const branchesEl = svg.querySelector<SVGGElement>('[data-tree-branches]')!;
+    const rootEl = svg.querySelector<SVGCircleElement>('[data-tree-root]')!;
     const leavesEl = tree.querySelector<HTMLElement>('.leaves')!;
     const hero = document.querySelector<HTMLElement>('.hero');
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -496,6 +499,13 @@
         dim += s;
       }
       dimEl.setAttribute('d', dim);
+
+      // Root node wherever the spine has grown: an obvious joint for the trajectory to meet.
+      const spineShown = spineVisited > y0 || (escaped && path && headU > L);
+      rootEl.setAttribute('cx', f1(spline.x(y0) - homeX));
+      rootEl.setAttribute('cy', f1(y0 - homeY));
+      rootEl.setAttribute('r', spineShown ? '3' : '0');
+      rootEl.classList.toggle('on', !!(escaped && path && headU >= L));
 
       for (const l of leaves) {
         if (l.g <= 0) {
