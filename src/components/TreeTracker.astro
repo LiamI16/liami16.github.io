@@ -101,12 +101,11 @@
   };
 
   const READ_AT = 0.58; // the head rides the spine at this fraction of the viewport (hero → first leaf)
-  // On the spine the head moves in steps, one leaf at a time: a leaf is reached when the top of its
-  // cover rises past ARRIVE_AT of the viewport, and released when it sinks back below RELEASE_AT.
-  // Called as soon as a cover starts to enter from the bottom edge, so that even at a brisk scroll
-  // (~650px/s) the whole step — head, branch, cover — lands while the card is still low on screen.
-  const ARRIVE_AT = 0.95;
-  const RELEASE_AT = 1.05;
+  // On the spine the head moves in steps, one leaf at a time: a leaf is reached when its branch
+  // node rises past ARRIVE_AT of the viewport, and released when it sinks back below RELEASE_AT.
+  // Keyed to the node (not the cover) so the head always lands on screen.
+  const ARRIVE_AT = 0.9;
+  const RELEASE_AT = 0.97;
   // Focus steps in scroll order: the newest grown card takes focus once its centre rises above
   // FOCUS_ON of the viewport, and keeps it until that centre sinks back below FOCUS_OFF.
   const FOCUS_ON = 0.62;
@@ -115,10 +114,10 @@
   const LEAN = 10; // px the spine leans toward each leaf
   const JOIN = 90; // the spine starts this far below the hero divider, so the path enters it gently
   const NODE_ABOVE = 34; // a branch leaves the spine this far above the cover's midline
-  const BRANCH_S = 0.2; // seconds for a branch to draw
+  const BRANCH_S = 0.26; // seconds for a branch to draw
   const CARD_AT = 0.3; // branch progress at which the card starts to unfold
-  const OMEGA = 20; // head spring (critically damped), rad/s — a one-leaf step settles in ~0.25s
-  const MAX_SPEED = 2800; // px/s along the path — the head can lag, never jump
+  const OMEGA = 15; // head spring (critically damped), rad/s — a one-leaf step settles in ~0.35s
+  const MAX_SPEED = 2200; // px/s along the path — the head can lag, never jump
   const GHOST_S = 0.5; // fade of the visited connector after the head rejoins the loop
   const STATE_KEY = 'tree:state';
   const NS = 'http://www.w3.org/2000/svg';
@@ -369,8 +368,8 @@
         reached = leaves.length;
         return;
       }
-      while (reached < leaves.length && leaves[reached].coverTop <= sy + H * ARRIVE_AT) reached++;
-      while (reached > 0 && leaves[reached - 1].coverTop > sy + H * RELEASE_AT) reached--;
+      while (reached < leaves.length && leaves[reached].nodeY <= sy + H * ARRIVE_AT) reached++;
+      while (reached > 0 && leaves[reached - 1].nodeY > sy + H * RELEASE_AT) reached--;
     }
 
     function targetU(readY: number, sy: number) {
