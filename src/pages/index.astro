@@ -405,13 +405,14 @@ const projects = (await getCollection('projects', ({ data }) => import.meta.env.
     transform: translateY(10px);
   }
 
-  /* Focus: the card nearest the reading line stays at full strength; the rest recede. */
+  /* Focus: the card whose cover is nearest the reading line stays at full strength; the rest recede
+     gently, so they stay readable. */
   .leaf :global(.card) {
     transition: opacity var(--dur) var(--ease-out);
   }
 
   .tree[data-anim] .leaf[data-grown]:not([data-focus]) :global(.card) {
-    opacity: 0.55;
+    opacity: 0.72;
   }
 
   .leaf:hover :global(.card),

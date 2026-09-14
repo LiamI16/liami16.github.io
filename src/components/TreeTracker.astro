@@ -108,10 +108,10 @@
   // Keyed to the node (not the cover) so the head always lands on screen.
   const ARRIVE_AT = 0.9;
   const RELEASE_AT = 0.97;
-  // Focus steps in scroll order: the newest grown card takes focus once its centre rises above
-  // FOCUS_ON of the viewport, and keeps it until that centre sinks back below FOCUS_OFF.
-  const FOCUS_ON = 0.62;
-  const FOCUS_OFF = 0.7;
+  // Focus: the grown card whose cover centre is nearest the reading line (FOCUS_AT of the
+  // viewport). It switches halfway between neighbouring covers, with a little hysteresis.
+  const FOCUS_AT = 0.45;
+  const FOCUS_HOLD = 24; // px a rival cover must be closer by before focus moves
   const ESCAPE_SPAN = 360; // px of scroll over which the head travels from the loop to the spine
   const LEAN = 10; // px the spine leans toward each leaf
   const JOIN = 90; // the spine starts this far below the hero divider, so the path enters it gently
@@ -546,17 +546,19 @@
       tracer.style.transform = `translate3d(${(p.x - homeX).toFixed(2)}px, ${(p.y - homeY).toFixed(2)}px, 0)`;
     }
 
-    /** Focus: the newest grown card whose centre has risen past FOCUS_ON (FOCUS_OFF for the holder). */
+    /** Focus: the grown cover nearest the reading line; its card, branch and node light together. */
     function updateCurrent(sy: number) {
+      const line = sy + H * FOCUS_AT;
       const grown = leaves.filter((l) => l.li.hasAttribute('data-grown'));
-      let next = -1;
+      let best = -1;
+      let bestD = Infinity;
       for (const l of grown) {
-        const centre = docOffset(l.card).y + l.card.offsetHeight / 2;
-        const line = sy + H * (l.index === focusIdx ? FOCUS_OFF : FOCUS_ON);
-        if (centre <= line) next = l.index;
+        const d = Math.abs(l.cardY - line);
+        if (d < bestD) (bestD = d), (best = l.index);
       }
-      if (next < 0 && grown.length) next = grown[0].index; // the only card out so far
-      focusIdx = escaped ? next : -1;
+      const held = grown.find((l) => l.index === focusIdx);
+      if (held && best !== focusIdx && Math.abs(held.cardY - line) - bestD < FOCUS_HOLD) best = focusIdx;
+      focusIdx = escaped ? best : -1;
       current = focusIdx;
       for (const l of leaves) {
         const on = l.index === focusIdx;
