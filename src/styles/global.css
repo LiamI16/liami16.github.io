@@ -263,18 +263,33 @@ html[data-soft-nav] .fade-up {
 
 /* ─── Tags / meta ────────────────────────────────────────────────────── */
 
+/* Items separated by "·". Every item carries a separator in the gap before it; the line is
+   shifted left by one gap and clipped there, so a separator at the start of any wrapped line
+   (including the first) is hidden rather than dangling. */
 .meta-line {
+  --sep: 1.2rem;
+  position: relative;
+  left: calc(-1 * var(--sep));
+  width: calc(100% + var(--sep));
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.25rem 0.6rem;
+  row-gap: 0.25rem;
   color: var(--muted);
+  clip-path: inset(-24px -24px -24px var(--sep));
 }
 
-.meta-line > * + *::before {
+.meta-line > * {
+  position: relative;
+  margin-left: var(--sep);
+  white-space: nowrap;
+}
+
+.meta-line > *::before {
   content: '·';
-  order: -2; /* stays ahead of the status dot, which is also a pseudo-element */
-  margin-right: 0.6rem;
+  position: absolute;
+  left: calc(var(--sep) * -0.5);
+  transform: translateX(-50%);
   color: var(--muted);
 }
 

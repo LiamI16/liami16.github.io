@@ -13,7 +13,8 @@ npm run build    # output in dist/
 ## Add a project
 
 Create `src/content/projects/<slug>/index.mdx` with a `cover` image beside it.
-Frontmatter is validated by `src/content.config.ts`. Optional `category` and
+Frontmatter is validated by `src/content.config.ts`. `date` (month/year shown), optional
+`updated`, `category` and
 `status` (e.g. `Research`, `Under review · ACC 2026`) fill the meta line on cards
 and article headers. Entries with `draft: true` show in `npm run dev` but are
 excluded from the production build.

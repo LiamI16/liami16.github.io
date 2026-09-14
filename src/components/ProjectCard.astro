@@ -1,6 +1,7 @@
 ---
 import { Image } from 'astro:assets';
 import type { CollectionEntry } from 'astro:content';
+import { formatMonth } from '../lib/dates';
 
 interface Props {
   project: CollectionEntry<'projects'>;
@@ -30,7 +31,7 @@ const href = `/projects/${project.id}/`;
   <div class="body">
     <p class="mono meta-line">
       {category && <span>{category}</span>}
-      <span>{date.getFullYear()}</span>
+      <span><time datetime={date.toISOString().slice(0, 10)}>{formatMonth(date)}</time></span>
       {status && <span class="status-dot">{status}</span>}
       {draft && <span class="draft">Draft</span>}
     </p>

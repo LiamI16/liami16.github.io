@@ -2,6 +2,7 @@
 import { Image, getImage } from 'astro:assets';
 import { getCollection, render } from 'astro:content';
 import Base from '../../layouts/Base.astro';
+import { formatMonth } from '../../lib/dates';
 
 export async function getStaticPaths() {
   const projects = (await getCollection('projects', ({ data }) => import.meta.env.DEV || !data.draft)).sort(
@@ -9,13 +10,18 @@ export async function getStaticPaths() {
   );
   return projects.map((project, i) => ({
     params: { slug: project.id },
-    props: { project, next: projects.length > 1 ? projects[(i + 1) % projects.length] : undefined },
+    props: {
+      project,
+      next: projects.length > 1 ? projects[(i + 1) % projects.length] : undefined,
+      wraps: i === projects.length - 1, // the last project's "next" loops back to the first
+    },
   }));
 }
 
-const { project, next } = Astro.props;
+const { project, next, wraps } = Astro.props;
 const { Content, headings } = await render(project);
-const { title, summary, stack, cover, coverAlt, repo, demo, draft, category, status, date } = project.data;
+const { title, summary, stack, cover, coverAlt, repo, demo, draft, category, status, date, updated } = project.data;
+const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 const toc = headings.filter((h) => h.depth === 2 || h.depth === 3);
 const ogImage = cover.format === 'svg' ? undefined : (await getImage({ src: cover, width: 1200, format: 'png' })).src;
 ---
@@ -30,7 +36,14 @@ const ogImage = cover.format === 'svg' ? undefined : (await getImage({ src: cove
 
       <p class="mono meta-line fade-up" style="--i: 0">
         {category && <span>{category}</span>}
-        <span>{date.getFullYear()}</span>
+        <span><time datetime={isoDay(date)}>{formatMonth(date)}</time></span>
+        {
+          updated && (
+            <span>
+              Updated <time datetime={isoDay(updated)}>{formatMonth(updated)}</time>
+            </span>
+          )
+        }
         {status && <span class="status-dot">{status}</span>}
         {draft && <span class="draft">Draft — still in progress</span>}
       </p>
@@ -99,9 +112,9 @@ const ogImage = cover.format === 'svg' ? undefined : (await getImage({ src: cove
   {
     next && (
       <div class="tone">
-      <nav class="wrap next" aria-label="Next project">
+      <nav class="wrap next" aria-label={wraps ? 'Back to the first project' : 'Next project'}>
         <a href={`/projects/${next.id}/`}>
-          <span class="mono label">Next project</span>
+          <span class="mono label">{wraps ? 'Back to the first project' : 'Next project'}</span>
           <span class="next-title">{next.data.title}</span>
           <span class="mono next-summary">{next.data.category ?? next.data.stack.slice(0, 3).join(' / ')}</span>
           <svg viewBox="0 0 24 24" aria-hidden="true">

@@ -8,7 +8,10 @@ const projects = defineCollection({
     z.object({
       title: z.string(),
       summary: z.string(),
+      // Month/year shown on cards and articles; also orders the tree (newest first after featured).
       date: z.coerce.date(),
+      // Optional: shown on the article as "Updated <month year>" for write-ups that change over time.
+      updated: z.coerce.date().optional(),
       stack: z.array(z.string()),
       cover: image(),
       coverAlt: z.string(),
