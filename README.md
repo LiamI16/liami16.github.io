@@ -29,7 +29,10 @@ excluded from the production build.
   The footer ζ slider regenerates it at runtime.
 - **Tree** (`src/components/TreeTracker.astro`): on the home page the phase
   portrait's head leaves the loop on scroll, following its own trajectory into a
-  spine through the work section; each project grows off it as the head arrives.
+  spine through the work section. On the spine the head steps one project at a
+  time: a cover entering the bottom of the viewport calls the head to its branch,
+  the branch draws, the cover unfolds, then its text. The card nearest the
+  reading line stays in focus while the others recede.
 - **Résumé link** appears in the header automatically once `public/resume.pdf` exists.
 - `public/og.png` is the default social preview; project pages use their cover.
 

@@ -93,21 +93,32 @@
     side: number; // -1 grows left of the spine, +1 right
     cardY: number; // document y where the branch meets the cover
     nodeY: number; // document y where the branch leaves the spine
+    coverTop: number; // document y of the top of the cover: crossing ARRIVE_AT calls the head here
     edgeX: number; // document x of the cover edge facing the spine
     g: number; // branch growth 0..1
     branch: SVGPathElement;
     node: SVGCircleElement;
   };
 
-  const READ_AT = 0.58; // the head rides the spine at this fraction of the viewport
+  const READ_AT = 0.58; // the head rides the spine at this fraction of the viewport (hero → first leaf)
+  // On the spine the head moves in steps, one leaf at a time: a leaf is reached when the top of its
+  // cover rises past ARRIVE_AT of the viewport, and released when it sinks back below RELEASE_AT.
+  // Called as soon as a cover starts to enter from the bottom edge, so that even at a brisk scroll
+  // (~650px/s) the whole step — head, branch, cover — lands while the card is still low on screen.
+  const ARRIVE_AT = 0.95;
+  const RELEASE_AT = 1.05;
+  // Focus steps in scroll order: the newest grown card takes focus once its centre rises above
+  // FOCUS_ON of the viewport, and keeps it until that centre sinks back below FOCUS_OFF.
+  const FOCUS_ON = 0.62;
+  const FOCUS_OFF = 0.7;
   const ESCAPE_SPAN = 360; // px of scroll over which the head travels from the loop to the spine
   const LEAN = 10; // px the spine leans toward each leaf
   const JOIN = 90; // the spine starts this far below the hero divider, so the path enters it gently
   const NODE_ABOVE = 34; // a branch leaves the spine this far above the cover's midline
-  const BRANCH_S = 0.32; // seconds for a branch to draw
-  const CARD_AT = 0.55; // branch progress at which the card starts to unfold
-  const OMEGA = 14; // head spring (critically damped), rad/s
-  const MAX_SPEED = 2200; // px/s along the path — the head can lag, never jump
+  const BRANCH_S = 0.2; // seconds for a branch to draw
+  const CARD_AT = 0.3; // branch progress at which the card starts to unfold
+  const OMEGA = 20; // head spring (critically damped), rad/s — a one-leaf step settles in ~0.25s
+  const MAX_SPEED = 2800; // px/s along the path — the head can lag, never jump
   const GHOST_S = 0.5; // fade of the visited connector after the head rejoins the loop
   const STATE_KEY = 'tree:state';
   const NS = 'http://www.w3.org/2000/svg';
@@ -224,6 +235,8 @@
     let spineVisited = -Infinity; // furthest document y the head has reached on the spine (ever)
     let ghostA = 0;
     let current = -1;
+    let reached = 0; // leaves (in spine order) the head has been called to
+    let focusIdx = -1;
     let lastDraw = '';
     let raf = 0;
     let lastT = 0;
@@ -286,6 +299,7 @@
             side,
             cardY,
             nodeY: cardY - (desktop ? NODE_ABOVE : 22),
+            coverTop: y,
             edgeX: side < 0 ? x + cover.offsetWidth : x,
             g: prev?.g ?? 0,
             branch,
@@ -342,16 +356,34 @@
       path = { pts, cum, L: cum[cum.length - 1] };
     }
 
+    const atBottom = (sy: number) => sy + H >= document.documentElement.scrollHeight - 4;
+
     function readLine(sy: number) {
-      if (sy + H >= document.documentElement.scrollHeight - 4) return yEnd; // bottom: reach every leaf
+      if (atBottom(sy)) return yEnd; // bottom: reach every leaf
       return Math.min(sy + H * READ_AT, yEnd);
     }
 
-    function targetU(readY: number) {
+    /** Which leaves have called the head, from where their covers sit in the viewport. */
+    function updateReached(sy: number) {
+      if (atBottom(sy)) {
+        reached = leaves.length;
+        return;
+      }
+      while (reached < leaves.length && leaves[reached].coverTop <= sy + H * ARRIVE_AT) reached++;
+      while (reached > 0 && leaves[reached - 1].coverTop > sy + H * RELEASE_AT) reached--;
+    }
+
+    function targetU(readY: number, sy: number) {
       const L = path!.L;
+      if (reached > 0) {
+        // Stepped: rest on the latest reached leaf's node (the spine's end once at the bottom).
+        const y = atBottom(sy) ? yEnd : leaves[reached - 1].nodeY;
+        return L + (y - y0);
+      }
       if (readY <= escStart()) return 0;
       if (readY < y0) return ((readY - escStart()) / ESCAPE_SPAN) * L;
-      return L + (readY - y0);
+      // Before the first leaf calls, follow the scroll — but never past the first node.
+      return L + (Math.min(readY, leaves[0]?.nodeY ?? yEnd) - y0);
     }
 
     function pointAt(uu: number): Pt {
@@ -420,7 +452,8 @@
 
     function growLeaves(dt: number, instant: boolean) {
       for (const l of leaves) {
-        if (l.g === 0 && spineVisited >= l.nodeY) l.g = instant || reduceMotion ? 1 : 1e-4;
+        // The head settles onto a node asymptotically, so arrival is "within a pixel and a half".
+        if (l.g === 0 && spineVisited >= l.nodeY - 1.5) l.g = instant || reduceMotion ? 1 : 1e-4;
         else if (l.g > 0 && l.g < 1) l.g = Math.min(1, l.g + dt / BRANCH_S);
         if (l.g >= CARD_AT && !l.li.hasAttribute('data-grown')) {
           if (instant) {
@@ -504,24 +537,36 @@
       tracer.style.transform = `translate3d(${(p.x - homeX).toFixed(2)}px, ${(p.y - homeY).toFixed(2)}px, 0)`;
     }
 
-    function updateCurrent() {
-      let idx = -1;
-      let card: Element | null = null;
-      if (escaped && path && u > path.L) {
-        const headY = y0 + (u - path.L);
-        for (const l of leaves) if (l.g >= 1 && l.nodeY <= headY) (idx = l.index), (card = l.card);
+    /** Focus: the newest grown card whose centre has risen past FOCUS_ON (FOCUS_OFF for the holder). */
+    function updateCurrent(sy: number) {
+      const grown = leaves.filter((l) => l.li.hasAttribute('data-grown'));
+      let next = -1;
+      for (const l of grown) {
+        const centre = docOffset(l.card).y + l.card.offsetHeight / 2;
+        const line = sy + H * (l.index === focusIdx ? FOCUS_OFF : FOCUS_ON);
+        if (centre <= line) next = l.index;
       }
-      current = idx;
-      for (const l of leaves) l.card.toggleAttribute('data-active', l.card === card);
+      if (next < 0 && grown.length) next = grown[0].index; // the only card out so far
+      focusIdx = escaped ? next : -1;
+      current = focusIdx;
+      for (const l of leaves) {
+        const on = l.index === focusIdx;
+        l.card.toggleAttribute('data-active', on);
+        l.li.toggleAttribute('data-focus', on);
+      }
     }
 
     function step(dt: number, sy: number, instant: boolean) {
       const readY = readLine(sy);
-      if (!escaped && readY > escStart()) escape(sy, instant);
+      const leaving = !escaped && readY > escStart();
+      if (leaving) escape(sy, instant);
+      updateReached(sy);
 
       if (escaped && path) {
-        const target = targetU(readY);
-        if (reduceMotion || instant) {
+        const target = targetU(readY, sy);
+        if (leaving && !instant) {
+          // Hold the head exactly on the loop's head for the handoff frame; it moves off next frame.
+        } else if (reduceMotion || instant) {
           u = target;
           uv = 0;
         } else {
@@ -533,6 +578,7 @@
             u += uv * h;
             if (u < 0) (u = 0), (uv = Math.max(0, uv));
           }
+          if (Math.abs(target - u) < 0.5 && Math.abs(uv) < 8) (u = target), (uv = 0); // settle exactly
         }
         u = Math.min(u, path.L + (yEnd - y0));
         visitedU = Math.max(visitedU, u);
@@ -541,7 +587,7 @@
       }
 
       growLeaves(dt, instant);
-      updateCurrent();
+      updateCurrent(sy);
       place();
       draw(dt);
     }
