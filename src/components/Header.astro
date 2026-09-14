@@ -1,12 +1,13 @@
 ---
-import { existsSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 
 interface Props {
   progress?: boolean;
 }
 
 const { progress = false } = Astro.props;
-const hasResume = existsSync('public/resume.pdf');
+const pdfs = readdirSync('public').filter((f) => /r[eé]sum[eé].*\.pdf$/i.test(f));
+const resume = pdfs.includes('resume.pdf') ? 'resume.pdf' : pdfs.sort().at(-1);
 ---
 
 <header class="site-header" data-site-header>
@@ -23,7 +24,7 @@ const hasResume = existsSync('public/resume.pdf');
 
     <nav aria-label="Primary">
       <a href="/#work" class="nav-link">Work</a>
-      {hasResume && <a href="/resume.pdf" class="nav-link">Résumé</a>}
+      {resume && <a href={`/${resume}`} class="nav-link">Résumé</a>}
       <a href="https://github.com/LiamI16" class="nav-link">GitHub</a>
       <button type="button" class="theme-toggle" data-theme-toggle aria-label="Toggle dark theme">
         <svg viewBox="0 0 24 24" aria-hidden="true">
