@@ -288,6 +288,8 @@ const ogImage = cover.format === 'svg' ? undefined : (await getImage({ src: cove
   .cover :global(img:not(.glow)) {
     width: 100%;
     height: auto;
+    max-height: min(34rem, 62svh);
+    object-fit: cover;
     border-radius: 14px;
     border: 1px solid var(--line);
     box-shadow: var(--shadow);

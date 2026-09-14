@@ -306,15 +306,10 @@ const projects = (await getCollection('projects', ({ data }) => import.meta.env.
   }
 
   @media (min-width: 900px) {
-    .work-head {
-      grid-template-columns: auto auto 1fr;
-    }
 
+    /* Narrow enough to end well short of the spine in the centre channel. */
     .work-note {
-      grid-column: 3;
-      justify-self: end;
-      max-width: 26rem;
-      text-align: right;
+      max-width: 28rem;
     }
   }
 

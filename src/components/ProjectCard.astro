@@ -25,11 +25,11 @@ const href = `/projects/${project.id}/`;
       data-vt-cover={project.id}
       style="view-transition-class: vt-cover"
     />
-    <span class="index mono">{String(index + 1).padStart(2, '0')}</span>
   </a>
   </div>
   <div class="body">
     <p class="mono meta-line">
+      <span class="index">{String(index + 1).padStart(2, '0')}</span>
       {category && <span>{category}</span>}
       <span><time datetime={date.toISOString().slice(0, 10)}>{formatMonth(date)}</time></span>
       {status && <span class="status-dot">{status}</span>}
@@ -123,16 +123,7 @@ const href = `/projects/${project.id}/`;
   }
 
   .index {
-    position: absolute;
-    top: 0.75rem;
-    left: 0.75rem;
-    padding: 0.15rem 0.5rem;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--bg) 82%, transparent);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
     color: var(--ink);
-    font-size: 0.7rem;
   }
 
   .body {

@@ -472,6 +472,11 @@ html[data-soft-nav] .fade-up {
   color: var(--shiki-dark);
 }
 
+/* Covers are often light screenshots or white-background figures; keep them from glaring on dark. */
+:root[data-theme='dark'] img[data-vt-cover] {
+  filter: brightness(0.88);
+}
+
 /* ─── Page transitions ───────────────────────────────────────────────── */
 
 ::view-transition-group(*) {
